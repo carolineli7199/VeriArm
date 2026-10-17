@@ -17,7 +17,7 @@ Run every command from the repo root with the project venv: `.venv/bin/python -m
 .venv/bin/python -m art_curator.app                  # same, real Claude curator (needs ANTHROPIC_API_KEY)
 ```
 
-On the page: type a theme, **Curate Exhibition**, then **Assemble exhibition**. Afterwards tick
+On the page: type a theme (or press **🎤 Speak** and say it), **Curate Exhibition**, then **Assemble exhibition**. Afterwards tick
 "All 8 tiles are back..." and **Confirm reset** before the next one.
 
 Claude needs `ANTHROPIC_API_KEY=...` in the repo's `.env` (gitignored, next to the Viam keys).
@@ -50,6 +50,7 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | `calibrate.py` | works out the 11 spots from the sheets; hover-checks them on the arm |
 | `layout.json` | the 11 spots (world mm) + `calibrated`, `slot_mode`, `region_mm` |
 | `narrate.py` | spoken narration (ElevenLabs, Mac voice as fallback): preview, each artwork as it's carried, statement, reflection, sign-off |
+| `listen.py` | speech to text for the theme (ElevenLabs Scribe), used by the page's 🎤 button |
 | `app.py`, `page.html` | the web page |
 | `images/1.jpg` ... `8.jpg` | public-domain pictures of the artworks, for the page |
 | `test_curator.py` | validator tests (no robot, no network) |
@@ -95,6 +96,16 @@ camera can't see slot 3).
 Port 8090, so it can run next to VeriArm's `ui.py` (8080). Only one of them may drive the arm at a time.
 **Stop arm** (robot mode) stops the arm where it is and leaves the suction as is; the e-stop is the real
 safety.
+
+## Speaking the theme (🎤)
+
+The page shows **🎤 Speak** when `ELEVENLABS_API_KEY` is in `.env` (the key needs the Speech to Text
+permission). Press it, say the theme; it stops by itself after a 1.5 s pause (or press **■ Stop**; at most
+15 s), the browser sends the recording to `app.py`, which has ElevenLabs transcribe it (`listen.py`; the key
+never reaches the browser). The words appear in the theme box and curating starts on its own. The pause
+detection adapts to the room's noise (measured in the first 0.3 s). Any browser with a mic (Chrome, Safari);
+allow the mic when asked. Typing always works too. Test without the page:
+`.venv/bin/python -m art_curator.listen some_recording.m4a`.
 
 ## Narration (`--voice`)
 

@@ -29,6 +29,10 @@
   button.secondary { background: transparent; color: var(--accent); }
   button.danger { background: var(--bad); border-color: var(--bad); }
   button:disabled { opacity: .4; cursor: not-allowed; }
+  button.mic { background: transparent; color: var(--accent); }
+  button.mic.listening { background: var(--bad); border-color: var(--bad); color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .65; } }
+  .micnote { font-size: 14px; color: var(--muted); min-height: 20px; margin: -6px 0 10px; }
 
   .banner { padding: 12px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
             display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -85,8 +89,10 @@
     <label class="field">Describe your exhibition theme
       <input type="text" id="theme" placeholder="Curate an exhibition about finding hope in uncertain times" autocomplete="off">
     </label>
+    <button type="button" id="mic" class="mic" hidden title="Say your theme out loud">🎤 Speak</button>
     <button type="submit" id="curate">Curate Exhibition</button>
   </form>
+  <div class="micnote" id="micnote"></div>
 
   <div class="banner" id="banner"></div>
   <section class="show" id="show" hidden></section>
@@ -186,10 +192,74 @@ async function refresh() {
   try { S = await (await fetch("/api/status")).json(); } catch { return; }
   const running = S.busy || S.state.status === "running";
   $("curate").disabled = !!running;
+  $("mic").hidden = !(S.listen && navigator.mediaDevices && window.MediaRecorder);
+  $("mic").disabled = !!running && !rec;
   $("mode").innerHTML = (S.mode === "robot" ? `<b class="real">REAL ARM</b>` : `<b>simulated arm</b>`)
                         + ` · ${S.curator} curator · ${S.slot_mode === "camera" ? "camera finds tiles" : "fixed slots"}`;
   banner(); show(); strip();
 }
+
+// ---------- speak the theme: record, stop on silence, ElevenLabs turns it into text (via /api/transcribe) ----------
+// "speech" = louder than SPEECH_RMS and than 3x the room's noise (measured in the first 0.3 s), so a
+// noisy hall still gets a pause detected
+const SPEECH_RMS = 0.02, NOISE_MS = 300, SILENCE_MS = 1500, MAX_MS = 15000, NO_SPEECH_MS = 7000;
+let rec = null;
+
+function micNote(text) { $("micnote").textContent = text; }
+
+async function startListening() {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
+  catch { micNote("No microphone access: allow it in the browser, or type the theme."); return; }
+  const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find(t => MediaRecorder.isTypeSupported(t)) || "";
+  const recorder = new MediaRecorder(stream, mime ? {mimeType: mime} : {});
+  const chunks = [], ctx = new AudioContext(), analyser = ctx.createAnalyser();
+  ctx.createMediaStreamSource(stream).connect(analyser);
+  await ctx.resume();  // browsers can start an AudioContext paused; then the level would read 0
+  const buf = new Float32Array(analyser.fftSize);
+  const started = Date.now();
+  let heard = false, lastSound = Date.now(), noise = 0;
+  rec = {recorder, stream, ctx};
+  recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => finishListening(new Blob(chunks, {type: recorder.mimeType || mime}), heard);
+  recorder.start();
+  $("mic").classList.add("listening"); $("mic").textContent = "■ Stop";
+  micNote("Listening… say your theme (it stops by itself when you pause)");
+  rec.timer = setInterval(() => {  // stop after a pause, or if nothing is said
+    analyser.getFloatTimeDomainData(buf);
+    const rms = Math.sqrt(buf.reduce((a, v) => a + v * v, 0) / buf.length);
+    const now = Date.now();
+    rec.peak = Math.max(rec.peak || 0, rms);  // loudest level seen (for tuning SPEECH_RMS)
+    if (now - started < NOISE_MS) { noise = Math.max(noise, rms); return; }
+    if (rms > Math.max(SPEECH_RMS, 3 * noise)) { heard = true; lastSound = now; }
+    if ((heard && now - lastSound > SILENCE_MS) || now - started > MAX_MS || (!heard && now - started > NO_SPEECH_MS)) stopListening();
+  }, 100);
+}
+
+function stopListening() {
+  if (!rec) return;
+  clearInterval(rec.timer);
+  if (rec.recorder.state !== "inactive") rec.recorder.stop();
+  rec.stream.getTracks().forEach(t => t.stop());
+  rec.ctx.close();
+}
+
+async function finishListening(blob, heard) {
+  rec = null;
+  $("mic").classList.remove("listening"); $("mic").textContent = "🎤 Speak";
+  if (!heard) { micNote("Didn't hear anything. Try again, or type the theme."); return; }
+  micNote("Transcribing…");
+  try {
+    const r = await fetch("/api/transcribe", {method: "POST", headers: {"Content-Type": blob.type || "audio/webm"}, body: blob});
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    $("theme").value = data.text;
+    micNote(`Heard: “${data.text}”`);
+    if (!$("curate").disabled) $("form").requestSubmit();  // straight on to curating
+  } catch (e) { micNote(`Couldn't transcribe (${e.message}). Try again, or type the theme.`); }
+}
+
+$("mic").onclick = () => rec ? stopListening() : startListening();
 
 $("form").onsubmit = e => {
   e.preventDefault();

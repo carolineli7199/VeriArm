@@ -6,6 +6,7 @@
   python -m art_curator.app --voice         narrate out loud: the exhibition, then each artwork as it's placed
   python -m art_curator.app --voice-wait    the same, but the arm waits for each sentence (if audio stutters)
   python -m art_curator.app --slots camera  find the tiles with the camera (default: layout.json slot_mode)
+The page's mic button records the visitor's theme; /api/transcribe sends it to ElevenLabs (listen.py).
   --host 0.0.0.0 to open it from another laptop.
 
 Separate from VeriArm's ui.py (port 8080); both can run at once, but only one may drive the arm.
@@ -35,6 +36,8 @@ class App:
         self.lock = threading.Lock()
         self.pending: dict | None = None  # last validated curation, not yet assembled
         self.recent: list[list[int]] = []  # artwork IDs of past curations this session, for variety
+        from art_curator.listen import available
+        self.listen = available()  # mic button on the page (ElevenLabs speech to text)
         self.busy: str | None = None      # "curating" | "assembling"
         self.error: str | None = None
 
@@ -46,6 +49,7 @@ class App:
                     "mode": "robot" if self.robot else "simulated", "curator": "offline" if self.offline else "claude",
                     "calibrated": bool(ex.load_layout().get("calibrated")),
                     "slot_mode": ex.slot_mode(ex.load_layout(), self.slots),
+                    "listen": self.listen,
                     "catalog": [{"id": i, "title": a["title"], "artist": a["artist"]} for i, a in catalog.items()]}
 
     def _claim(self, what: str) -> None:
@@ -161,6 +165,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
+        if self.path == "/api/transcribe":  # raw audio from the page's mic button
+            from art_curator.listen import ListenError, transcribe
+            try:
+                text = transcribe(self.rfile.read(n), self.headers.get("Content-Type") or "audio/webm")
+                print(f"[listen] heard: {text}")
+                self._json(200, {"text": text})
+            except ListenError as e:
+                print(f"[listen] {e}")
+                self._json(409, {"error": str(e)})
+            return
         body = json.loads(self.rfile.read(n) or b"{}")
         try:
             if self.path == "/api/curate":
