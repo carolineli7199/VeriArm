@@ -197,6 +197,10 @@ scores it prints. Real tiles should be well above `MIN_SCORE` (0.25) in `find_ar
 
 The full checklist with every parameter to tune: **[ROBOT_DAY.md](ROBOT_DAY.md)**.
 
+Test commands take spot names (current `layout.json` positions): `tile hover S8`, `tile pick-test S3`,
+`tile move S1 E1` (`S1`..`S8`, `E1`..`E3`, `blue`, or X Y numbers). They don't update the exhibition state:
+put tiles back and `exhibition reset` before a real run. `exhibition run` prints how long each move takes.
+
 1. **Height correction.** One tile at the blue zone center:
    `.venv/bin/python -m art_curator.tile hover`. Measure the gap G (cup bottom to tile top). Set
    `TILE_Z_CORRECTION_MM = 47 - G` in `tile.py` (in general: `HOVER_MM + current value - G`).

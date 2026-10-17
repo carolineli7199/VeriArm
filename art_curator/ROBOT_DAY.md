@@ -1,5 +1,8 @@
 # Robot day: AI Art Curator checklist
 
+Spots can be named in the `tile` commands: `S1`..`S8`, `E1`..`E3` (or `slot_1`, `exhibit_1`), `blue`,
+or two numbers X Y. They always use the current positions in `layout.json`.
+
 Everything below runs from the repo root (`~/Documents/robotics-hackathon`, branch `feature/art-curator`).
 `py` = `.venv/bin/python`. Every motion asks first unless `--yes`. **Someone at the e-stop, always.**
 Package sorting (VeriArm) is untouched: the sheets stay where they are, `poses.json` is never written.
@@ -24,11 +27,12 @@ Package sorting (VeriArm) is untouched: the sheets stay where they are, `poses.j
 | 2 | **Height correction** (one tile at the blue zone center) | `py -m art_curator.tile hover` | gap G measured with a ruler (cup bottom to tile top); set `TILE_Z_CORRECTION_MM = 47 - G` in `tile.py` |
 | 3 | Verify the correction (optional, 2 min) | `py -m art_curator.tile hover` again | gap now ~30 mm |
 | 4 | **Pick test** | `py -m art_curator.tile pick-test` | tile lifts 6 cm, goes back down, released; console says `HELD` |
-| 5 | **Reach + calibration**: a tile (or outline) on every spot | `py -m art_curator.calibrate check` | all 11 hovered, nudged (`dx dy` mm), marked calibrated. **Do S8 (furthest, ~63 cm) and S1/S5 (beside the base) first** |
+| 5a | **Reach check** on the hardest spots first | `py -m art_curator.tile hover S8`, then `hover S1`, `hover S5` | the arm gets there (S8 is ~63 cm out; S1/S5 sit beside the base). If not: tighten `COL_MM`/`GRID_MM` in `calibrate.py` |
+| 5b | **Calibration**: a tile (or outline) on every spot | `py -m art_curator.calibrate check` | all 11 hovered, nudged (`dx dy` mm), marked calibrated |
 | 6 | Tape the 11 outlines on the table, labeled | | resets are "tile on its label" |
-| 7 | One full move, slot to exhibit | `py -m art_curator.tile move X1 Y1 X2 Y2` (S1 -> E1 coords from `layout.json`) | tile lands inside E1's outline |
-| 8 | **First exhibition, step by step** | `py -m art_curator.exhibition reset` then `py -m art_curator.exhibition run "joy"` | 3 tiles in E1-E3 in order; **time one tile** (stopwatch: pick start to arm risen) |
-| 9 | Full narrated run | `py -m art_curator.exhibition reset`, then `py -m art_curator.exhibition run "<theme>" --yes --voice` | voice and arm in step; tile visible while its detail is spoken |
+| 7 | One full move, slot to exhibit | `py -m art_curator.tile move S1 E1` | tile lands inside E1's outline. Put it back on S1 afterwards (test moves don't update the exhibition state) |
+| 8 | **First exhibition, step by step** | `py -m art_curator.exhibition reset` then `py -m art_curator.exhibition run "joy"` | 3 tiles in E1-E3 in order. Each move prints `[time] move N: … s` (asking before each motion makes these slower; step 9 gives the real numbers) |
+| 9 | Full narrated run | `py -m art_curator.exhibition reset`, then `py -m art_curator.exhibition run "<theme>" --yes --voice` | voice and arm in step; tile visible while its detail is spoken. **Note the `[time]` lines and the "whole run" time** (`py -m art_curator.exhibition status` shows them again) |
 | 10 | The page, real arm | `py -m art_curator.app --robot --voice` | theme by voice -> curate -> Assemble -> sign-off; Stop button works |
 | 11 | **Camera, look only** (tiles on slots, some a bit off / turned) | `py -m art_curator.find_art` | all 8 found; scores printed; check `art_curator/runtime/find_art_*.jpg` and the offsets vs reality |
 | 12 | Camera, full run | `py -m art_curator.exhibition run "<theme>" --slots camera` | picks land on the tile centers even when tiles are off by 2-3 cm |
@@ -88,7 +92,7 @@ drop the calibration and every nudge.
 ## Numbers to write down tomorrow
 
 - Height correction G: ____ mm -> `TILE_Z_CORRECTION_MM` = ____
-- One tile, pick to risen: ____ s (estimate was ~25 s) -> whole exhibition ~____ min
+- One tile (`[time]` lines, step 9): ____ s (estimate was ~25 s); whole run: ____ min (estimate ~2.5)
 - Camera scores, real tiles: lowest ____ ; empty slot: highest ____
 - Camera offsets vs reality: worst ____ mm
 - Furthest spot reached: S8 yes / no

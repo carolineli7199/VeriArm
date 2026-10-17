@@ -310,6 +310,7 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                 save(state)
                 if narrator:
                     narrator.placing(picks[m.step])  # plays while this tile is carried
+                t0 = time.monotonic()
                 try:
                     await robot.move(m)
                 except Exception as e:  # grip lost, motion error, connection drop: stop, don't guess
@@ -321,7 +322,10 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                     if narrator:
                         narrator.failed(picks[m.step])
                     return state
+                secs = round(time.monotonic() - t0, 1)  # pick + place, the arm's part only
+                print(f"[time] move {m.step} ({m.title}): {secs:.1f} s")
                 state["run"]["moves"][i]["status"] = "done"
+                state["run"]["moves"][i]["seconds"] = secs
                 state["locations"][str(m.art_id)] = m.dest
                 save(state)
                 if narrator:  # the tile is down and visible: one sentence about a detail in it
@@ -332,6 +336,8 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
             await narrator.quiet()
             narrator.complete(exhibition)
             await narrator.quiet()
+        started = time.mktime(time.strptime(state["run"]["started"], "%Y-%m-%dT%H:%M:%S"))
+        state["run"]["seconds"] = round(time.time() - started)  # whole run, incl. camera and narration
         state.update(status="complete", note="exhibition assembled; reset before the next one")
         save(state)
         return state
@@ -344,8 +350,12 @@ def print_status(state: dict) -> None:
     catalog = load_catalog()
     for art, where in sorted(state["locations"].items(), key=lambda kv: int(kv[0])):
         print(f"  [{art}] {catalog[int(art)]['title']:30s} {where}")
-    for m in (state.get("run") or {}).get("moves", []):
-        print(f"  move {m['step']}: [{m['art_id']}] {m['title']} -> {m['dest']}: {m['status']}")
+    run = state.get("run") or {}
+    for m in run.get("moves", []):
+        took = f" ({m['seconds']:.1f} s)" if "seconds" in m else ""
+        print(f"  move {m['step']}: [{m['art_id']}] {m['title']} -> {m['dest']}: {m['status']}{took}")
+    if "seconds" in run:
+        print(f"  whole run: {run['seconds'] // 60}:{run['seconds'] % 60:02d} min (assemble to sign-off)")
 
 
 def main():

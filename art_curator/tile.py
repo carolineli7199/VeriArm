@@ -5,11 +5,15 @@ hard table: VeriArm presses 10 mm into a box top (cardboard gives); here that wo
 the table, so the press is a few mm. VeriArm's code is only imported, never changed.
 
 First time with tiles: measure the height correction (see TILE_Z_CORRECTION_MM).
-  python -m art_curator.tile hover              tip 30 mm above a tile at the blue zone center; measure the gap
-  python -m art_curator.tile hover --x 350 --y 120
-  python -m art_curator.tile pick-test          pick the tile, lift 6 cm, put it back, release
-  python -m art_curator.tile move X1 Y1 X2 Y2   pick at (X1, Y1), place at (X2, Y2)
+  python -m art_curator.tile hover                tip 30 mm above a tile at the blue zone center; measure the gap
+  python -m art_curator.tile hover slot_8         ... above a layout spot (reach check)
+  python -m art_curator.tile pick-test S3         pick the tile, lift 6 cm, put it back, release
+  python -m art_curator.tile move slot_1 exhibit_1
+Spots: slot_1..slot_8 / exhibit_1..exhibit_3 (or S1..S8 / E1..E3, from layout.json: always the current,
+calibrated positions), "blue" (blue zone center), or two numbers X Y in world mm.
 Every motion asks first unless --yes. Keep someone at the e-stop.
+These are test moves: they don't update the exhibition's state. Afterwards put the tiles back and run
+`exhibition reset` before a real run.
 """
 import argparse
 import asyncio
@@ -100,25 +104,65 @@ async def pick_test(machine: RobotClient, x: float, y: float) -> None:
     print("[tile] pick test OK: picked, lifted, put back")
 
 
+def spot_xy(name: str) -> tuple[float, float]:
+    """slot_3 / S3 / exhibit_1 / E1 / blue -> (x, y) from layout.json (or the blue zone center)."""
+    from art_curator.exhibition import load_layout
+    key = name.strip().lower()
+    if key == "blue":
+        zone = get_pose("blue_zone")["center_world"]
+        return zone["x"], zone["y"]
+    layout = load_layout()
+    if key[:1] == "s" and key[1:].isdigit():
+        key = f"slot_{key[1:]}"
+    if key[:1] == "e" and key[1:].isdigit():
+        key = f"exhibit_{key[1:]}"
+    if key.startswith("slot_") and key in layout["slots"]:
+        p = layout["slots"][key]
+    elif key.startswith("exhibit_") and key[8:] in layout["exhibit"]:
+        p = layout["exhibit"][key[8:]]
+    else:
+        raise SystemExit(f"[tile] unknown spot '{name}': use slot_1..slot_{len(layout['slots'])}, "
+                         f"exhibit_1..exhibit_{len(layout['exhibit'])} (or S1 / E1), blue, or X Y")
+    return float(p["x"]), float(p["y"])
+
+
+def parse_spots(tokens: list[str]) -> list[tuple[str, float, float]]:
+    """Spot names and/or X Y number pairs, in order -> [(label, x, y)]."""
+    out, i = [], 0
+    while i < len(tokens):
+        try:
+            x = float(tokens[i])
+        except ValueError:
+            out.append((tokens[i], *spot_xy(tokens[i])))
+            i += 1
+            continue
+        if i + 1 >= len(tokens):
+            raise SystemExit(f"[tile] '{tokens[i]}' needs a Y after it")
+        out.append((f"({tokens[i]}, {tokens[i + 1]})", x, float(tokens[i + 1])))
+        i += 2
+    return out
+
+
 async def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("cmd", choices=["hover", "pick-test", "move"])
-    p.add_argument("coords", nargs="*", type=float, help="move: X1 Y1 X2 Y2 (world mm)")
-    zone = get_pose("blue_zone")["center_world"]
-    p.add_argument("--x", type=float, default=zone["x"], help="tile center x (default: blue zone center)")
-    p.add_argument("--y", type=float, default=zone["y"], help="tile center y (default: blue zone center)")
+    p.add_argument("where", nargs="*", help="hover / pick-test: one spot; move: two (from, to). Default: blue")
     p.add_argument("--yes", action="store_true", help="don't ask before each motion")
     args = p.parse_args()
+    spots = parse_spots(args.where) or parse_spots(["blue"])
+    need = 2 if args.cmd == "move" else 1
+    if len(spots) != need:
+        p.error(f"{args.cmd} needs {need} spot{'s' if need > 1 else ''}, got {len(spots)}")
+    for label, x, y in spots:
+        print(f"[tile] {label}: x={x:.1f} y={y:.1f}")
     find_pick.ASK_BEFORE_MOVING = not args.yes
-    if args.cmd == "move" and len(args.coords) != 4:
-        p.error("move needs X1 Y1 X2 Y2")
     async with await connect() as machine:
         if args.cmd == "hover":
-            await hover(machine, args.x, args.y)
+            await hover(machine, spots[0][1], spots[0][2])
         elif args.cmd == "pick-test":
-            await pick_test(machine, args.x, args.y)
+            await pick_test(machine, spots[0][1], spots[0][2])
         else:
-            x1, y1, x2, y2 = args.coords
+            (_, x1, y1), (_, x2, y2) = spots
             await pick_tile(machine, x1, y1)
             await place_tile(machine, x2, y2)
             await go_to_overview(machine)
