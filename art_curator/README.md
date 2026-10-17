@@ -103,7 +103,9 @@ The page shows **🎤 Speak** when `ELEVENLABS_API_KEY` is in `.env` (the key ne
 permission). Press it, say the theme; it stops by itself after a 1.5 s pause (or press **■ Stop**; at most
 15 s), the browser sends the recording to `app.py`, which has ElevenLabs transcribe it (`listen.py`; the key
 never reaches the browser). The words appear in the theme box and curating starts on its own. The pause
-detection adapts to the room's noise (measured in the first 0.3 s). Any browser with a mic (Chrome, Safari);
+detection adapts to the room's noise. The mic is opened once and kept open while the page is open (opening
+it per press took 0.5-1.5 s), so recording starts the moment Speak is pressed; macOS shows its mic dot the
+whole time, but nothing is recorded or sent until Speak is pressed. Any browser with a mic (Chrome, Safari);
 allow the mic when asked. Typing always works too. Test without the page:
 `.venv/bin/python -m art_curator.listen some_recording.m4a`.
 

@@ -200,38 +200,59 @@ async function refresh() {
 }
 
 // ---------- speak the theme: record, stop on silence, ElevenLabs turns it into text (via /api/transcribe) ----------
-// "speech" = louder than SPEECH_RMS and than 3x the room's noise (measured in the first 0.3 s), so a
-// noisy hall still gets a pause detected
-const SPEECH_RMS = 0.02, NOISE_MS = 300, SILENCE_MS = 1500, MAX_MS = 15000, NO_SPEECH_MS = 7000;
-let rec = null;
+// The mic is opened once and kept open (opening it takes 0.5-1.5 s, which made every press lag). While idle
+// it only tracks the room's noise level, locally; nothing is recorded or sent until Speak is pressed.
+// "speech" = louder than SPEECH_RMS and than 3x the room's noise, so a noisy hall still gets a pause detected.
+const SPEECH_RMS = 0.02, SILENCE_MS = 1500, MAX_MS = 15000, NO_SPEECH_MS = 7000;
+let mic = null, micOpening = null, rec = null, starting = false;
 
 function micNote(text) { $("micnote").textContent = text; }
 
+function level() {
+  mic.analyser.getFloatTimeDomainData(mic.buf);
+  return Math.sqrt(mic.buf.reduce((a, v) => a + v * v, 0) / mic.buf.length);
+}
+
+function openMic() {  // once; later calls reuse it
+  if (mic) return Promise.resolve(mic);
+  return micOpening ||= (async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    const ctx = new AudioContext(), analyser = ctx.createAnalyser();
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    await ctx.resume();  // browsers can start an AudioContext paused; then the level would read 0
+    mic = {stream, ctx, analyser, buf: new Float32Array(analyser.fftSize), noise: 0};
+    setInterval(() => {  // room noise, while not recording: a slow average
+      if (ctx.state !== "running") ctx.resume();
+      if (!rec) mic.noise = mic.noise ? 0.9 * mic.noise + 0.1 * level() : level();
+    }, 200);
+    return mic;
+  })().finally(() => { micOpening = null; });
+}
+
 async function startListening() {
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
-  catch { micNote("No microphone access: allow it in the browser, or type the theme."); return; }
+  if (starting) return;  // a second press while the mic is still opening
+  starting = true;
+  $("mic").classList.add("listening"); $("mic").textContent = "■ Stop";  // instant feedback
+  micNote(mic ? "Listening… say your theme (it stops by itself when you pause)" : "Opening the microphone…");
+  try { await openMic(); }
+  catch {
+    starting = false;
+    $("mic").classList.remove("listening"); $("mic").textContent = "🎤 Speak";
+    micNote("No microphone access: allow it in the browser, or type the theme."); return;
+  }
   const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find(t => MediaRecorder.isTypeSupported(t)) || "";
-  const recorder = new MediaRecorder(stream, mime ? {mimeType: mime} : {});
-  const chunks = [], ctx = new AudioContext(), analyser = ctx.createAnalyser();
-  ctx.createMediaStreamSource(stream).connect(analyser);
-  await ctx.resume();  // browsers can start an AudioContext paused; then the level would read 0
-  const buf = new Float32Array(analyser.fftSize);
-  const started = Date.now();
-  let heard = false, lastSound = Date.now(), noise = 0;
-  rec = {recorder, stream, ctx};
+  const recorder = new MediaRecorder(mic.stream, mime ? {mimeType: mime} : {});
+  const chunks = [], started = Date.now(), threshold = Math.max(SPEECH_RMS, 3 * mic.noise);
+  let heard = false, lastSound = started;
+  rec = {recorder};
   recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
   recorder.onstop = () => finishListening(new Blob(chunks, {type: recorder.mimeType || mime}), heard);
   recorder.start();
-  $("mic").classList.add("listening"); $("mic").textContent = "■ Stop";
+  starting = false;
   micNote("Listening… say your theme (it stops by itself when you pause)");
   rec.timer = setInterval(() => {  // stop after a pause, or if nothing is said
-    analyser.getFloatTimeDomainData(buf);
-    const rms = Math.sqrt(buf.reduce((a, v) => a + v * v, 0) / buf.length);
     const now = Date.now();
-    rec.peak = Math.max(rec.peak || 0, rms);  // loudest level seen (for tuning SPEECH_RMS)
-    if (now - started < NOISE_MS) { noise = Math.max(noise, rms); return; }
-    if (rms > Math.max(SPEECH_RMS, 3 * noise)) { heard = true; lastSound = now; }
+    if (level() > threshold) { heard = true; lastSound = now; }
     if ((heard && now - lastSound > SILENCE_MS) || now - started > MAX_MS || (!heard && now - started > NO_SPEECH_MS)) stopListening();
   }, 100);
 }
@@ -239,9 +260,7 @@ async function startListening() {
 function stopListening() {
   if (!rec) return;
   clearInterval(rec.timer);
-  if (rec.recorder.state !== "inactive") rec.recorder.stop();
-  rec.stream.getTracks().forEach(t => t.stop());
-  rec.ctx.close();
+  if (rec.recorder.state !== "inactive") rec.recorder.stop();  // the mic itself stays open
 }
 
 async function finishListening(blob, heard) {
@@ -260,6 +279,9 @@ async function finishListening(blob, heard) {
 }
 
 $("mic").onclick = () => rec ? stopListening() : startListening();
+
+// mic already allowed on an earlier visit: open it now, so even the first press is instant
+navigator.permissions?.query({name: "microphone"}).then(p => { if (p.state === "granted") openMic().catch(() => {}); }).catch(() => {});
 
 $("form").onsubmit = e => {
   e.preventDefault();
