@@ -39,11 +39,12 @@ RESPONSE_SCHEMA = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["id", "position", "reason"],
+                "required": ["id", "position", "reason", "detail"],
                 "properties": {
                     "id": {"type": "integer", "enum": [1, 2, 3, 4, 5, 6, 7, 8]},
                     "position": {"type": "integer", "enum": [1, 2, 3]},
                     "reason": {"type": "string"},
+                    "detail": {"type": "string"},
                 },
             },
         },
@@ -53,8 +54,12 @@ RESPONSE_SCHEMA = {
 SYSTEM = """You are the curator of a tiny physical gallery. A robot arm will hang your exhibition.
 The collection has exactly eight artworks (the catalog below). For the visitor's theme, choose exactly
 three different artworks and order them as a story: position 1 opens the exhibition, position 2 develops
-it, position 3 resolves it. Give the exhibition a short evocative title, a curatorial statement of two or
-three sentences, and for each artwork one or two sentences on why it belongs at that point in the story.
+it, position 3 resolves it. Give the exhibition a short evocative title and a curatorial statement of two or
+three sentences. For each artwork, write two short parts that a narrator speaks:
+  reason: one sentence, under 25 words, on why it belongs at that point in the story; spoken while the robot
+    carries the piece, so the listener can't see it closely yet
+  detail: one sentence, under 20 words, pointing out one specific thing visible in the artwork that ties it
+    to the theme; spoken right after the piece is set down, while visitors look at it
 
 Also write a spoken preview, read aloud before the robot builds the exhibition: one or two sentences, under
 30 words, that invite the listener into the journey and hint at its high point. Evoke the arc rather than
@@ -137,13 +142,14 @@ def validate(answer, catalog: dict[int, dict]) -> dict:
         raise CurationError(f"need exactly {N_PICKS} artworks, got {picks!r:.80}")
     clean = []
     for i, p in enumerate(picks, 1):
-        if not isinstance(p, dict) or set(p) != {"id", "position", "reason"}:
-            raise CurationError(f"artwork #{i} must have exactly id, position, reason")
+        if not isinstance(p, dict) or set(p) != {"id", "position", "reason", "detail"}:
+            raise CurationError(f"artwork #{i} must have exactly id, position, reason, detail")
         art_id = _int(p["id"], f"artwork #{i} id")
         pos = _int(p["position"], f"artwork #{i} position")
         if art_id not in catalog:
             raise CurationError(f"artwork #{i}: ID {art_id} is not in the catalog")
         clean.append({"id": art_id, "position": pos, "reason": _text(p["reason"], f"artwork #{i} reason"),
+                      "detail": _text(p["detail"], f"artwork #{i} detail"),
                       "title": catalog[art_id]["title"], "artist": catalog[art_id]["artist"]})
     ids = [p["id"] for p in clean]
     if len(set(ids)) != N_PICKS:
@@ -220,7 +226,8 @@ def offline_pick(theme: str, catalog: dict[int, dict]) -> dict:
         "preview": f"A test exhibition about {theme[:40]}.",
         "curatorial_statement": "Picked by keyword overlap (offline test mode, no AI).",
         "closing": "Thank you for testing.",
-        "selected_artworks": [{"id": a["id"], "position": i, "reason": f"Themes: {', '.join(a['themes'])}."}
+        "selected_artworks": [{"id": a["id"], "position": i, "reason": f"Themes: {', '.join(a['themes'])}.",
+                               "detail": a["description"]}
                               for i, a in enumerate(top, 1)],
     }
 
@@ -244,7 +251,7 @@ def show(ex: dict) -> None:
     print(f"\n  {ex['exhibition_title']}\n  (preview) {ex['preview']}\n  {ex['curatorial_statement']}\n"
           f"  (closing) {ex['closing']}\n")
     for p in ex["selected_artworks"]:
-        print(f"  {p['position']}. [{p['id']}] {p['title']} ({p['artist']})\n     {p['reason']}")
+        print(f"  {p['position']}. [{p['id']}] {p['title']} ({p['artist']})\n     {p['reason']}\n     (detail) {p['detail']}")
     print(f"\n  ({ex['curator']}, {ex['seconds']} s)")
 
 

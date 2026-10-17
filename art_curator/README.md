@@ -42,7 +42,7 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | File | What it does |
 |---|---|
 | `catalog.json` | the 8 artworks: id, title, artist, themes, description, pickup slot |
-| `curator.py` | theme -> Claude -> 3 IDs in order + title, spoken preview, statement, closing reflection, reasons. `validate()` rejects anything off. The web page also tells Claude what the last 3 exhibitions showed, so a run of demos varies |
+| `curator.py` | theme -> Claude -> 3 IDs in order + title, spoken preview, statement, closing reflection, and per artwork a reason + a visible detail. `validate()` rejects anything off. The web page also tells Claude what the last 3 exhibitions showed, so a run of demos varies |
 | `exhibition.py` | turns a validated exhibition into 3 moves; tracks where every tile is; runs them |
 | `tile.py` | picks / places one 2 mm tile on the real arm; hover test for the height correction |
 | `find_art.py` | camera mode: finds each tile near its slot and checks it's the right artwork (like `find_box`, for tiles) |
@@ -103,7 +103,10 @@ On the page (`app --voice`) or the terminal (`exhibition run ... --voice`):
    `preview` field: under 30 words, e.g. "When the ground shifts beneath you, where does light come from?
    Follow a path from dread to a night sky that refuses to stop shining.")
 2. on Assemble: "Now assembling *title*."
-3. as each tile is carried: "First / Next / And finally, *artwork*, by *artist*." + why it's there
+3. as each tile is carried: "First / Next / And finally, *artwork*, by *artist*." + why it's there (the
+   `reason` field); once it's set down and the arm has risen 12 cm, one sentence about something visible in
+   it (the `detail` field, e.g. "Look at the rowers bowed low in their boats, steadfast beneath the curling
+   claws of foam.")
 4. once all 3 are placed: "*Title*: from *A*, through *B*, to *C*.", the full curatorial statement over
    the finished table, Claude's closing reflection (the `closing` field: one sentence about the theme, e.g.
    "Perhaps hope isn't the absence of uncertainty, but the courage to find beauty within it."), and always
@@ -112,10 +115,10 @@ On the page (`app --voice`) or the terminal (`exhibition run ... --voice`):
    closing line has been spoken, then "Exhibition assembled".
    (on a failure: "I couldn't place *artwork*. Please check the table.")
 
-Pacing: each artwork's description plays while its tile is carried, and the next tile doesn't start until
-that description has finished (the first move also waits for the preview; the closing words wait for the
-last description). Each tile takes its move time or its description time (~10-15 s), whichever is longer, so
-voice and arm stay together.
+Pacing: each artwork's general part plays while its tile is carried; the detail sentence waits until the
+tile is down and the general part has finished; the next tile waits for the detail (the first move also
+waits for the preview; the closing words wait for the last detail). Estimated ~2.5 min from theme to
+sign-off with fixed slots, assuming ~25 s per tile (not yet timed on the robot).
 
 Voice: **ElevenLabs** when `ELEVENLABS_API_KEY` is in `.env` (default voice "George", change with
 `ELEVENLABS_VOICE_ID`; list voices with `.venv/bin/python -m art_curator.narrate voices`). Right after

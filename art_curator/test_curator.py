@@ -13,9 +13,12 @@ GOOD = {
     "curatorial_statement": "An exploration of how humanity finds hope amid uncertainty.",
     "closing": "Look up tonight; the stars are still there.",
     "selected_artworks": [
-        {"id": 4, "position": 1, "reason": "The Scream represents our confrontation with fear."},
-        {"id": 2, "position": 2, "reason": "The Great Wave captures the struggle against overwhelming forces."},
-        {"id": 1, "position": 3, "reason": "The Starry Night represents the possibility of wonder and hope."},
+        {"id": 4, "position": 1, "reason": "The Scream represents our confrontation with fear.",
+         "detail": "See how the sky bends around the screaming figure."},
+        {"id": 2, "position": 2, "reason": "The Great Wave captures the struggle against overwhelming forces.",
+         "detail": "Find the boatmen, bent low beneath the crest."},
+        {"id": 1, "position": 3, "reason": "The Starry Night represents the possibility of wonder and hope.",
+         "detail": "Follow the swirls up to the crescent moon."},
     ],
 }
 
@@ -36,7 +39,9 @@ BAD = {
     "missing closing": broken(lambda a: a.pop("closing")),
     "blank closing": broken(lambda a: a.update(closing=" ")),
     "two artworks": broken(lambda a: a["selected_artworks"].pop()),
-    "four artworks": broken(lambda a: a["selected_artworks"].append({"id": 5, "position": 3, "reason": "x"})),
+    "four artworks": broken(lambda a: a["selected_artworks"].append({"id": 5, "position": 3, "reason": "x", "detail": "y"})),
+    "missing detail": broken(lambda a: a["selected_artworks"][1].pop("detail")),
+    "blank detail": broken(lambda a: a["selected_artworks"][1].update(detail="  ")),
     "duplicate id": broken(lambda a: a["selected_artworks"][1].update(id=4)),
     "id out of range": broken(lambda a: a["selected_artworks"][0].update(id=9)),
     "id as string": broken(lambda a: a["selected_artworks"][0].update(id="4")),

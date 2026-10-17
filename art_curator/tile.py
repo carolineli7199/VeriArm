@@ -32,6 +32,7 @@ TILE_H_MM = 2.0
 TILE_Z_CORRECTION_MM = 17.0
 HOVER_MM = 30.0
 APPROACH_MM = 50.0
+PLACE_BACK_OFF_MM = 120.0  # after placing, rise this far so the artwork is visible while it's described
 PRESS_MM = 3.0     # past the tile top: just enough to seal the cup, not enough to shove the table
 LIFT_MM = 60.0     # tile bottom this far above the table while carrying
 PUT_DOWN_MM = 3.0  # release with the tile this far above the table (a flat tile slides if dropped further)
@@ -76,7 +77,7 @@ async def place_tile(machine: RobotClient, x: float, y: float) -> None:
     find_pick.confirm("turn suction OFF (tile is just above the table)")
     await Gripper.from_robot(machine, GRIPPER).open()
     await asyncio.sleep(SETTLE_S)
-    await move_tip(machine, tile_tip(x, y, APPROACH_MM), "back off", straight_line=True)
+    await move_tip(machine, tile_tip(x, y, PLACE_BACK_OFF_MM), "back off", straight_line=True)
 
 
 async def hover(machine: RobotClient, x: float, y: float) -> None:

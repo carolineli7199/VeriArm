@@ -54,6 +54,7 @@
   .card h3 { font: 600 19px/1.25 var(--serif); margin: 0; }
   .card .artist { font-size: 14px; color: var(--muted); }
   .card .reason { font: 16px/1.5 var(--serif); margin: 4px 0 0; }
+  .card .detail { font: italic 15px/1.5 var(--serif); color: var(--muted); margin: 2px 0 0; }
   .badge { font-weight: 600; }
   .badge.done { color: var(--ok); } .badge.in_progress { color: var(--warn); } .badge.failed { color: var(--bad); }
 
@@ -158,6 +159,7 @@ function show() {
           <div class="pos"><span>Position ${a.position}</span>${badge}</div>
           <h3>${esc(a.title)}</h3><div class="artist">${esc(a.artist)}</div>
           <p class="reason">${esc(a.reason)}</p>
+          <p class="detail">${esc(a.detail)}</p>
         </div></article>`;
     }).join("")}</div>`;
 }

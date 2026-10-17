@@ -8,9 +8,9 @@ cached in runtime/voice_cache/. Any line ElevenLabs can't deliver in time (no wi
   .env: ELEVENLABS_API_KEY=...   optional: ELEVENLABS_VOICE_ID=... (see `voices`), ELEVENLABS_MODEL=...,
         ART_MAC_VOICE="Ava (Premium)" (a better `say` voice, if downloaded in System Settings)
 
-Pacing (exhibition.execute calls quiet() between steps): each artwork's description plays WHILE its tile is
-carried, and the next tile doesn't start until that description has finished; the closing words wait for
-the last one. wait=True is fully sequential instead: the arm pauses for every sentence, then moves.
+Pacing (exhibition.execute calls quiet() between steps): each artwork's general part ("reason") plays while
+its tile is carried; once the tile is down, one sentence about a visible detail; then the next tile. The
+closing words wait for the last detail. wait=True is fully sequential: the arm pauses for every sentence.
 
   python -m art_curator.narrate                 hear a sample narration (offline curator, no robot)
   python -m art_curator.narrate say "Hello"     say one sentence with the configured voice
@@ -175,7 +175,7 @@ class Narrator:
     def curated(self, ex: dict) -> None:
         """A new exhibition: start generating every line of it, and say the short preview."""
         self._prepare([self._preview(ex), self._starting(ex)]
-                      + [self._placing(p) for p in ex["selected_artworks"]]
+                      + [t for p in ex["selected_artworks"] for t in (self._placing(p), p["detail"])]
                       + [self._path(ex), ex["curatorial_statement"], ex["closing"], SIGN_OFF])
         self.say(self._preview(ex), self._names(ex))
 
@@ -183,9 +183,13 @@ class Narrator:
         self.say(self._starting(ex), "Now assembling your exhibition.")
 
     def placing(self, pick: dict) -> None:
-        """Called as the arm sets off for this artwork: the description plays while it's carried."""
+        """Called as the arm sets off for this artwork: the general part plays while it's carried."""
         intro = f"{ORDINAL.get(pick['position'], 'Then')}, {pick['title']}, by {pick['artist']}."
         self.say(self._placing(pick), intro)
+
+    def placed(self, pick: dict) -> None:
+        """The tile is down and the arm has backed off: one sentence about something visible in it."""
+        self.say(pick["detail"], " ")
 
     def complete(self, ex: dict) -> None:
         """Everything is on the table: the path through the three works, the full curatorial statement,
@@ -222,6 +226,7 @@ def sample() -> None:
     n.starting(ex)
     for p in ex["selected_artworks"]:
         n.placing(p)
+        n.placed(p)
     n.complete(ex)
 
 

@@ -305,7 +305,7 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                 narrator.starting(exhibition)
             for i, m in enumerate(moves):
                 if narrator and i:
-                    await narrator.quiet()  # the previous tile's description finishes before the next tile
+                    await narrator.quiet()  # the previous tile's detail sentence finishes before the next tile
                 state["run"]["moves"][i]["status"] = "in_progress"
                 save(state)
                 if narrator:
@@ -324,6 +324,9 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                 state["run"]["moves"][i]["status"] = "done"
                 state["locations"][str(m.art_id)] = m.dest
                 save(state)
+                if narrator:  # the tile is down and visible: one sentence about a detail in it
+                    await narrator.quiet()
+                    narrator.placed(picks[m.step])
             await robot.finish()
         if narrator:  # still "running" (page: "All 3 placed") until the closing words have been spoken
             await narrator.quiet()
