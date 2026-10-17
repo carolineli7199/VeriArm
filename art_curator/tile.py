@@ -7,7 +7,7 @@ the table, so the press is a few mm. VeriArm's code is only imported, never chan
 First time with tiles: measure the height correction (see TILE_Z_CORRECTION_MM).
   python -m art_curator.tile hover              tip 30 mm above a tile at the blue zone center; measure the gap
   python -m art_curator.tile hover --x 350 --y 120
-  python -m art_curator.tile pick-test          pick the tile, lift 3 cm, put it back, release
+  python -m art_curator.tile pick-test          pick the tile, lift 6 cm, put it back, release
   python -m art_curator.tile move X1 Y1 X2 Y2   pick at (X1, Y1), place at (X2, Y2)
 Every motion asks first unless --yes. Keep someone at the e-stop.
 """

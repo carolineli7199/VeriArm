@@ -4,6 +4,7 @@
   python -m art_curator.app --robot         REAL ARM: no per-motion questions, keep someone at the e-stop
   python -m art_curator.app --offline       keyword curator instead of Claude (no network / no API key)
   python -m art_curator.app --voice         read the title and statement aloud (VeriArm's announce.py)
+  python -m art_curator.app --slots camera  find the tiles with the camera (default: layout.json slot_mode)
   --host 0.0.0.0 to open it from another laptop.
 
 Separate from VeriArm's ui.py (port 8080); both can run at once, but only one may drive the arm.
@@ -28,8 +29,8 @@ class App:
     """What the page shows. The physical truth lives in exhibition's state file; this adds the
     curated-but-not-yet-assembled exhibition and what the server is busy with."""
 
-    def __init__(self, robot: bool, offline: bool, voice: bool):
-        self.robot, self.offline, self.voice = robot, offline, voice
+    def __init__(self, robot: bool, offline: bool, voice: bool, slots: str | None = None):
+        self.robot, self.offline, self.voice, self.slots = robot, offline, voice, slots
         self.lock = threading.Lock()
         self.pending: dict | None = None  # last validated curation, not yet assembled
         self.busy: str | None = None      # "curating" | "assembling"
@@ -42,6 +43,7 @@ class App:
             return {"state": state, "pending": self.pending, "busy": self.busy, "error": self.error,
                     "mode": "robot" if self.robot else "simulated", "curator": "offline" if self.offline else "claude",
                     "calibrated": bool(ex.load_layout().get("calibrated")),
+                    "slot_mode": ex.slot_mode(ex.load_layout(), self.slots),
                     "catalog": [{"id": i, "title": a["title"], "artist": a["artist"]} for i, a in catalog.items()]}
 
     def _claim(self, what: str) -> None:
@@ -89,7 +91,7 @@ class App:
         else:
             robot = ex.SimRobot(seconds=1.5)
         try:
-            state = asyncio.run(ex.execute(exhibition, robot, need_calibrated=self.robot))
+            state = asyncio.run(ex.execute(exhibition, robot, need_calibrated=self.robot, slots=self.slots))
             if state["status"] == "failed":
                 with self.lock:
                     self.error = state["note"]
@@ -182,10 +184,11 @@ def main():
     p.add_argument("--robot", action="store_true", help="drive the REAL arm (default: simulated)")
     p.add_argument("--offline", action="store_true", help="keyword curator, no Claude call")
     p.add_argument("--voice", action="store_true", help="speak the title and statement")
+    p.add_argument("--slots", choices=ex.SLOT_MODES, help="fixed or camera (default: layout.json slot_mode)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8090)
     args = p.parse_args()
-    APP = App(robot=args.robot, offline=args.offline, voice=args.voice)
+    APP = App(robot=args.robot, offline=args.offline, voice=args.voice, slots=args.slots)
     mode = "REAL ARM" if args.robot else "simulated arm"
     print(f"AI Art Curator ({mode}, {'offline' if args.offline else 'Claude'} curator): "
           f"http://{'localhost' if args.host == '127.0.0.1' else args.host}:{args.port}")

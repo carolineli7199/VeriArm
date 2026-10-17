@@ -1,0 +1,158 @@
+# AI Art Curator
+
+A variation of VeriArm. Type a theme ("finding hope in uncertain times"); Claude picks 3 of 8 artwork tiles
+and orders them as a story; the arm takes those tiles from their slots and lays them out as a small
+exhibition, in narrative order.
+
+Everything lives in this folder. It **imports** VeriArm's motion helpers (`find_pick`, `robot`, `poses`,
+`inspection`, `zones`, `grip_check`) but **never changes** them, and never writes VeriArm's `poses.json`.
+Package sorting keeps working as before.
+
+Run every command from the repo root with the project venv: `.venv/bin/python -m art_curator.<module> ...`
+
+## Quick start (no robot needed)
+
+```bash
+.venv/bin/python -m art_curator.app --offline        # web page, simulated arm: http://localhost:8090
+.venv/bin/python -m art_curator.app                  # same, real Claude curator (needs ANTHROPIC_API_KEY)
+```
+
+On the page: type a theme, **Curate Exhibition**, then **Assemble exhibition**. Afterwards tick
+"All 8 tiles are back..." and **Confirm reset** before the next one.
+
+Claude needs `ANTHROPIC_API_KEY=...` in the repo's `.env` (gitignored, next to the Viam keys).
+`--offline` swaps in a keyword matcher so everything else can be tested without network or a key.
+It is a test stand-in, not a curator.
+
+## The physical setup
+
+| What | Where |
+|---|---|
+| 8 artwork tiles | 11 x 11 cm, 2 mm 3D-printed plastic back, 10 x 10 cm print taped on (clear tape helps the suction seal) |
+| 8 pickup slots (S1-S8) | a 4 x 2 block centered on the **green** sheet, overhanging its short ends onto the table |
+| 3 exhibit spots (E1-E3) | a row across the **blue** sheet; E1 is the story's start |
+| orange sheet | not used |
+
+The sheets stay where VeriArm measured them. Each artwork has a fixed slot (`catalog.json`): S1 Starry
+Night, S2 Great Wave, S3 The Kiss, S4 The Scream, S5 Paris Street, S6 Dance, S7 Girl with a Pearl
+Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for a picture.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `catalog.json` | the 8 artworks: id, title, artist, themes, description, pickup slot |
+| `curator.py` | theme -> Claude -> 3 IDs in order + title, statement, reasons. `validate()` rejects anything off |
+| `exhibition.py` | turns a validated exhibition into 3 moves; tracks where every tile is; runs them |
+| `tile.py` | picks / places one 2 mm tile on the real arm; hover test for the height correction |
+| `calibrate.py` | works out the 11 spots from the sheets; hover-checks them on the arm |
+| `layout.json` | the 11 spots (world mm) + `calibrated`, `slot_mode`, `region_mm` |
+| `app.py`, `page.html` | the web page |
+| `images/1.jpg` ... `8.jpg` | public-domain pictures of the artworks, for the page |
+| `test_curator.py` | validator tests (no robot, no network) |
+| `runtime/` | gitignored: `state.json` (where tiles are), `run.lock`, `layout.png` |
+
+## Commands
+
+### Curate only (no motion)
+```bash
+.venv/bin/python -m art_curator.curator "what does it mean to be human"
+.venv/bin/python -m art_curator.curator "joy" --offline
+.venv/bin/python -m art_curator.curator --check answer.json      # validate a saved answer
+.venv/bin/python -m art_curator.test_curator                     # validator tests
+```
+
+### Run an exhibition from the terminal
+```bash
+.venv/bin/python -m art_curator.exhibition status
+.venv/bin/python -m art_curator.exhibition reset                         # after putting the tiles back by hand
+.venv/bin/python -m art_curator.exhibition plan "joy and freedom"        # curate + print the 3 moves, no motion
+.venv/bin/python -m art_curator.exhibition run "joy and freedom" --sim   # simulated arm
+.venv/bin/python -m art_curator.exhibition run "joy and freedom"         # REAL ARM, asks before every motion
+.venv/bin/python -m art_curator.exhibition run "joy and freedom" --yes   # REAL ARM, no questions
+```
+Test flags for `--sim`: `--fail-at 2` (move 2 loses its grip), `--slots camera --missing slot_3` (the
+camera can't see slot 3).
+
+### Web page
+```bash
+.venv/bin/python -m art_curator.app                    # simulated arm (default, safe)
+.venv/bin/python -m art_curator.app --robot            # REAL ARM: no per-motion questions, keep someone at the e-stop
+.venv/bin/python -m art_curator.app --voice            # also reads the title and statement aloud
+.venv/bin/python -m art_curator.app --host 0.0.0.0     # open it from another laptop
+```
+Port 8090, so it can run next to VeriArm's `ui.py` (8080). Only one of them may drive the arm at a time.
+**Stop arm** (robot mode) stops the arm where it is and leaves the suction as is; the e-stop is the real
+safety.
+
+## Slot mode: fixed or camera
+
+Where the arm picks each tile:
+
+- **fixed**: at the slot's coordinates in `layout.json`. Tiles must sit on their taped outlines.
+- **camera**: before any tile moves, the camera finds every tile within `region_mm` (default 30 mm) of its
+  slot and the arm picks where the tile really is. A missing or doubled tile stops the run before
+  anything moves, and names the slot.
+
+The default is `"slot_mode"` in `layout.json`. `--slots fixed` / `--slots camera` overrides it for one
+command (`exhibition run ...`) or for as long as the page's server runs (`app ...`). If camera mode
+misbehaves at the demo: restart the page with `--slots fixed`.
+
+Status: camera mode works with the simulated arm. The real detection (`locate.py`) is not written yet;
+until it is, use fixed on the real arm.
+
+## Rules the code enforces
+
+- Claude only chooses artwork IDs and their order. Every coordinate comes from `catalog.json` and
+  `layout.json`. A curator answer that fails validation (wrong count, repeated or unknown IDs, positions not
+  exactly 1/2/3, blank text, extra fields) moves nothing.
+- A run needs status **ready**, and only a reset sets it. A reset means a person checked the table: all
+  8 tiles in their slots, the exhibit empty.
+- One run at a time (a lock file the OS releases if the process dies).
+- A move counts as done only after the pick (with the wrist-camera grip check) and the place both
+  succeeded. A failed move stops the run; that tile becomes "unknown"; a reset is needed.
+- After a finished exhibition, a reset is needed before the next one. If a run died mid-way (crash,
+  Ctrl-C), the next command sees it and requires a reset.
+- Real-arm runs refuse while `layout.json` has `"calibrated": false`. Simulated runs ignore it.
+
+## First time on the robot (in this order)
+
+1. **Height correction.** One tile at the blue zone center:
+   `.venv/bin/python -m art_curator.tile hover`. Measure the gap G (cup bottom to tile top). Set
+   `TILE_Z_CORRECTION_MM = 47 - G` in `tile.py` (in general: `HOVER_MM + current value - G`).
+2. **Pick test.** `.venv/bin/python -m art_curator.tile pick-test`: pick, lift 6 cm, put back.
+3. **Check the 11 spots.** Tiles (or taped outlines) on every spot, then
+   `.venv/bin/python -m art_curator.calibrate check`. At each hover: Enter = good, `dx dy` = nudge in mm
+   (+x away from the arm base, +y to the left when standing at the base looking out), `s` skip, `q`
+   stop. At the end it asks to mark the layout calibrated. Check S8 (furthest, ~63 cm) and S1/S5 (beside
+   the base) first.
+4. **Tape the outlines** and label them S1-S8, E1-E3, so resets are quick.
+5. **Full run:** `exhibition reset`, then `exhibition run "<theme>"` (asks before each motion), then the
+   web page with `--robot`.
+
+**Don't re-run `calibrate from-saved` or `calibrate survey` after step 3**: both rebuild `layout.json`
+from scratch and drop `calibrated` and every nudge.
+
+`calibrate survey` finds the sheets with the camera, for when they've moved (by up to ~10-20 cm; the
+sheets must be empty). Then repeat step 3.
+
+## Troubleshooting
+
+| Message | Meaning / fix |
+|---|---|
+| `status is 'needs_reset'` / `'complete'` / `'failed'` | put all 8 tiles in their slots, clear the exhibit, then reset |
+| `layout.json is not calibrated` | do "First time on the robot" step 3, or use `--sim` |
+| `another exhibition is running` | wait, or check for another terminal / page server running a run |
+| `no ANTHROPIC_API_KEY` | add it to `.env`, or use `--offline` |
+| `artwork N is at 'unknown'` | a run failed while moving it: find the tile, put everything back, reset |
+| `camera can't find a tile in slot_N` | camera mode: that slot is empty, the tile is too far off, or two tiles overlap the region |
+| tile not picked (grip check: NOT held) | re-measure the height correction; check the tape is smooth where the cup lands |
+
+## For agents changing this code
+
+- Don't edit VeriArm files outside `art_curator/`; import them. Don't write `poses.json`.
+- Keep the LLM out of motion: it may only change which IDs are picked and in what order. New fields from
+  the model must go through `validate()`.
+- Every new way to move a tile must update `runtime/state.json` through `exhibition.execute` (state is
+  saved after every step).
+- Test without the arm first: `test_curator`, `exhibition ... --sim`, `app` (simulated by default).

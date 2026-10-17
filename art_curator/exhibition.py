@@ -3,6 +3,11 @@
 All motion comes from local data only: artwork ID -> catalog pickup slot -> layout.json (x, y), and
 narrative position -> layout.json exhibit spot. The curator's text is never used for motion.
 
+Slot mode (layout.json "slot_mode", or --slots): where the pick coordinates come from.
+  fixed   layout.json as-is: tiles must sit on their taped outlines
+  camera  before moving, the camera finds each tile within region_mm of its layout spot and the arm
+          picks where the tile really is; a missing or doubled tile stops the run before any tile moves
+
 State (art_curator/runtime/state.json) knows where each artwork is. Rules:
   - a run needs status "ready", which only `reset` sets (after a person checks the table)
   - one run at a time (a lock file, released even if the process dies)
@@ -15,6 +20,7 @@ State (art_curator/runtime/state.json) knows where each artwork is. Rules:
   python -m art_curator.exhibition plan "joy and freedom" --offline   # curate + print the 3 moves, no motion
   python -m art_curator.exhibition run "joy and freedom" --sim         # simulated robot
   python -m art_curator.exhibition run "joy and freedom"               # REAL ROBOT (asks before each motion)
+  ... run "joy and freedom" --sim --slots camera                        # simulated camera (tiles a bit off)
 """
 import argparse
 import asyncio
@@ -34,6 +40,7 @@ RUNTIME = HERE / "runtime"
 STATE_FILE = RUNTIME / "state.json"
 LOCK_FILE = RUNTIME / "run.lock"
 UNKNOWN = "unknown"
+SLOT_MODES = ("fixed", "camera")
 
 
 class NotReadyError(RuntimeError):
@@ -47,9 +54,10 @@ class Move:
     title: str
     source: str      # "slot_N"
     dest: str        # "exhibit_K"
-    source_xy: tuple
+    source_xy: tuple  # where the arm picks: the layout spot, or where the camera found the tile
     dest_xy: tuple
     status: str = "pending"  # pending | in_progress | done | failed
+    layout_xy: tuple = ()     # the layout spot (kept to compare with the camera)
 
 
 # ---------- state ----------
@@ -142,6 +150,27 @@ def load_layout(path: Path = LAYOUT_FILE) -> dict:
     return json.loads(path.read_text())
 
 
+def slot_mode(layout: dict, override: str | None = None) -> str:
+    mode = override or layout.get("slot_mode", "fixed")
+    if mode not in SLOT_MODES:
+        raise NotReadyError(f"slot mode '{mode}' is not one of {SLOT_MODES}")
+    return mode
+
+
+async def locate_sources(robot, moves: list[Move], state: dict, layout: dict) -> dict:
+    """Camera mode: find every tile that should be in a slot (all of them, not just the 3 to move: that's
+    the readiness check), then aim each move at its tile. Raises NotReadyError; nothing has moved."""
+    home = {where: art for art, where in state["locations"].items() if where.startswith("slot_")}
+    spots = {slot: (layout["slots"][slot]["x"], layout["slots"][slot]["y"]) for slot in home}
+    found = await robot.locate(spots, layout.get("region_mm", 30.0))
+    missing = sorted(set(spots) - set(found))
+    if missing:
+        raise NotReadyError(f"camera can't find a tile in {', '.join(missing)} (or found two): check those slots")
+    for m in moves:
+        m.source_xy = found[m.source]
+    return {slot: [round(v, 1) for v in xy] for slot, xy in found.items()}
+
+
 def plan_moves(exhibition: dict, state: dict, catalog: dict[int, dict], layout: dict,
                need_calibrated: bool = True) -> list[Move]:
     """The three moves, in exhibit order. Raises NotReadyError (nothing moves) unless every check passes."""
@@ -161,8 +190,8 @@ def plan_moves(exhibition: dict, state: dict, catalog: dict[int, dict], layout: 
             raise NotReadyError(f"artwork {art_id} is at '{where}', not its slot {source}")
         if occupant(state, dest) is not None:
             raise NotReadyError(f"{dest} is already occupied by artwork {occupant(state, dest)}")
-        moves.append(Move(pos, art_id, pick["title"], source, dest,
-                          (src_xy["x"], src_xy["y"]), (dst_xy["x"], dst_xy["y"])))
+        moves.append(Move(pos, art_id, pick["title"], source, dest, (src_xy["x"], src_xy["y"]),
+                          (dst_xy["x"], dst_xy["y"]), layout_xy=(src_xy["x"], src_xy["y"])))
     return moves
 
 
@@ -172,13 +201,28 @@ def print_plan(moves: list[Move]) -> None:
               f" -> {m.dest} (x={m.dest_xy[0]:.0f} y={m.dest_xy[1]:.0f})")
 
 
+def print_located(moves: list[Move]) -> None:
+    for m in moves:
+        dx, dy = m.source_xy[0] - m.layout_xy[0], m.source_xy[1] - m.layout_xy[1]
+        print(f"  [camera] {m.title} found at x={m.source_xy[0]:.0f} y={m.source_xy[1]:.0f}"
+              f" ({dx:+.0f}, {dy:+.0f} mm from its layout spot)")
+
+
 # ---------- running ----------
 
 class SimRobot:
-    """Stands in for the arm: prints and waits. fail_at=N makes move N fail like a lost grip."""
+    """Stands in for the arm: prints and waits. fail_at=N makes move N fail like a lost grip.
+    Its camera reports each tile up to 15 mm off its spot; missing=["slot_3"] hides that tile."""
 
-    def __init__(self, seconds: float = 1.0, fail_at: int | None = None):
-        self.seconds, self.fail_at = seconds, fail_at
+    def __init__(self, seconds: float = 1.0, fail_at: int | None = None, missing: list[str] = ()):
+        self.seconds, self.fail_at, self.missing = seconds, fail_at, list(missing)
+
+    async def locate(self, spots: dict, region_mm: float) -> dict:
+        import random
+        print(f"[sim] camera looking for {len(spots)} tiles")
+        await asyncio.sleep(self.seconds)
+        return {s: (x + random.uniform(-15, 15), y + random.uniform(-15, 15))
+                for s, (x, y) in spots.items() if s not in self.missing}
 
     async def __aenter__(self):
         return self
@@ -209,6 +253,10 @@ class RealRobot:
     async def __aexit__(self, *exc):
         await self.machine.close()
 
+    async def locate(self, spots: dict, region_mm: float) -> dict:
+        from art_curator.locate import locate_tiles
+        return await locate_tiles(self.machine, spots, region_mm)
+
     async def move(self, m: Move) -> None:
         from art_curator.tile import pick_tile, place_tile
         await pick_tile(self.machine, *m.source_xy)  # raises TileGripError if it didn't come up
@@ -219,9 +267,11 @@ class RealRobot:
         await go_to_overview(self.machine)
 
 
-async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_change=None) -> dict:
-    """Plan, then do the moves one by one, saving state after every step. Returns the final state.
-    Raises NotReadyError before any motion if a check fails. on_change(state) is called after each save."""
+async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_change=None,
+                  slots: str | None = None) -> dict:
+    """Plan, locate (camera mode), then do the moves one by one, saving state after every step.
+    Returns the final state. Raises NotReadyError before any tile moves if a check fails.
+    on_change(state) is called after each save. slots overrides layout.json's slot_mode."""
     catalog = load_catalog()
     def save(state):
         save_state(state)
@@ -232,12 +282,22 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
         state = load_state()
         if state["status"] == "running":  # we hold the lock, so whoever wrote "running" is gone
             mark_interrupted(state)
-        moves = plan_moves(exhibition, state, catalog, load_layout(), need_calibrated)
-        state.update(status="running", note=f"assembling '{exhibition['exhibition_title']}'",
-                     run={"exhibition": exhibition, "moves": [asdict(m) for m in moves],
-                          "started": time.strftime("%Y-%m-%dT%H:%M:%S")})
-        save(state)
+        layout = load_layout()
+        mode = slot_mode(layout, slots)
+        moves = plan_moves(exhibition, state, catalog, layout, need_calibrated)
         async with robot:
+            located = None
+            if mode == "camera":
+                try:
+                    located = await locate_sources(robot, moves, state, layout)
+                except NotReadyError:
+                    await robot.finish()  # camera pose -> back to overview; no tile has moved
+                    raise
+                print_located(moves)
+            state.update(status="running", note=f"assembling '{exhibition['exhibition_title']}'",
+                         run={"exhibition": exhibition, "moves": [asdict(m) for m in moves], "slot_mode": mode,
+                              "located": located, "started": time.strftime("%Y-%m-%dT%H:%M:%S")})
+            save(state)
             for i, m in enumerate(moves):
                 state["run"]["moves"][i]["status"] = "in_progress"
                 save(state)
@@ -277,6 +337,8 @@ def main():
     p.add_argument("--offline", action="store_true", help="keyword curator, no Claude call")
     p.add_argument("--sim", action="store_true", help="simulated robot (no arm)")
     p.add_argument("--fail-at", type=int, help="--sim: make move N fail")
+    p.add_argument("--slots", choices=SLOT_MODES, help="fixed or camera (default: layout.json slot_mode)")
+    p.add_argument("--missing", nargs="*", default=[], help="--sim --slots camera: slots the camera can't see")
     p.add_argument("--yes", action="store_true", help="reset: skip the question; run: don't ask before each motion")
     args = p.parse_args()
 
@@ -295,15 +357,15 @@ def main():
         show(exhibition)
         if args.cmd == "plan":
             state, layout = check_stale(load_state()), load_layout()
-            print("\nPlan (no motion):")
+            print(f"\nPlan (no motion, slot mode: {slot_mode(layout, args.slots)}):")
             print_plan(plan_moves(exhibition, state, load_catalog(), layout, need_calibrated=False))
             if not layout.get("calibrated"):
                 print("  (layout.json is a DRAFT: a real run will refuse until it's calibrated)")
             return
         import find_pick
         find_pick.ASK_BEFORE_MOVING = not args.yes
-        robot = SimRobot(fail_at=args.fail_at) if args.sim else RealRobot()
-        state = asyncio.run(execute(exhibition, robot, need_calibrated=not args.sim))
+        robot = SimRobot(fail_at=args.fail_at, missing=args.missing) if args.sim else RealRobot()
+        state = asyncio.run(execute(exhibition, robot, need_calibrated=not args.sim, slots=args.slots))
     except (CurationError, NotReadyError) as e:
         sys.exit(f"[exhibition] NOT STARTED, nothing moved: {e}")
     print()

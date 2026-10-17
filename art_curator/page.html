@@ -184,8 +184,8 @@ async function refresh() {
   try { S = await (await fetch("/api/status")).json(); } catch { return; }
   const running = S.busy || S.state.status === "running";
   $("curate").disabled = !!running;
-  $("mode").innerHTML = S.mode === "robot" ? `<b class="real">REAL ARM</b> · ${S.curator} curator`
-                                            : `<b>simulated arm</b> · ${S.curator} curator`;
+  $("mode").innerHTML = (S.mode === "robot" ? `<b class="real">REAL ARM</b>` : `<b>simulated arm</b>`)
+                        + ` · ${S.curator} curator · ${S.slot_mode === "camera" ? "camera finds tiles" : "fixed slots"}`;
   banner(); show(); strip();
 }
 
