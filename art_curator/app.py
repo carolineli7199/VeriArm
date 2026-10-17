@@ -3,7 +3,8 @@
   python -m art_curator.app                 http://localhost:8090  simulated arm (safe to play with)
   python -m art_curator.app --robot         REAL ARM: no per-motion questions, keep someone at the e-stop
   python -m art_curator.app --offline       keyword curator instead of Claude (no network / no API key)
-  python -m art_curator.app --voice         read the title and statement aloud (VeriArm's announce.py)
+  python -m art_curator.app --voice         narrate out loud: the exhibition, then each artwork as it's placed
+  python -m art_curator.app --voice-wait    the same, but the arm waits for each sentence (if audio stutters)
   python -m art_curator.app --slots camera  find the tiles with the camera (default: layout.json slot_mode)
   --host 0.0.0.0 to open it from another laptop.
 
@@ -29,8 +30,8 @@ class App:
     """What the page shows. The physical truth lives in exhibition's state file; this adds the
     curated-but-not-yet-assembled exhibition and what the server is busy with."""
 
-    def __init__(self, robot: bool, offline: bool, voice: bool, slots: str | None = None):
-        self.robot, self.offline, self.voice, self.slots = robot, offline, voice, slots
+    def __init__(self, robot: bool, offline: bool, narrator=None, slots: str | None = None):
+        self.robot, self.offline, self.narrator, self.slots = robot, offline, narrator, slots
         self.lock = threading.Lock()
         self.pending: dict | None = None  # last validated curation, not yet assembled
         self.recent: list[list[int]] = []  # artwork IDs of past curations this session, for variety
@@ -69,9 +70,8 @@ class App:
         with self.lock:
             self.pending = exhibition
             self.recent = (self.recent + [[p["id"] for p in exhibition["selected_artworks"]]])[-3:]
-        if self.voice:
-            import announce
-            announce.speak(f"{exhibition['exhibition_title']}. {exhibition['curatorial_statement']}")
+        if self.narrator:
+            self.narrator.curated(exhibition)
         return exhibition
 
     def assemble(self) -> None:
@@ -93,7 +93,8 @@ class App:
         else:
             robot = ex.SimRobot(seconds=1.5)
         try:
-            state = asyncio.run(ex.execute(exhibition, robot, need_calibrated=self.robot, slots=self.slots))
+            state = asyncio.run(ex.execute(exhibition, robot, need_calibrated=self.robot, slots=self.slots,
+                                           narrator=self.narrator))
             if state["status"] == "failed":
                 with self.lock:
                     self.error = state["note"]
@@ -185,12 +186,17 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--robot", action="store_true", help="drive the REAL arm (default: simulated)")
     p.add_argument("--offline", action="store_true", help="keyword curator, no Claude call")
-    p.add_argument("--voice", action="store_true", help="speak the title and statement")
+    p.add_argument("--voice", action="store_true", help="narrate out loud")
+    p.add_argument("--voice-wait", action="store_true", help="--voice, but the arm waits for each sentence")
     p.add_argument("--slots", choices=ex.SLOT_MODES, help="fixed or camera (default: layout.json slot_mode)")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8090)
     args = p.parse_args()
-    APP = App(robot=args.robot, offline=args.offline, voice=args.voice, slots=args.slots)
+    narrator = None
+    if args.voice or args.voice_wait:
+        from art_curator.narrate import Narrator
+        narrator = Narrator(wait=args.voice_wait)
+    APP = App(robot=args.robot, offline=args.offline, narrator=narrator, slots=args.slots)
     mode = "REAL ARM" if args.robot else "simulated arm"
     print(f"AI Art Curator ({mode}, {'offline' if args.offline else 'Claude'} curator): "
           f"http://{'localhost' if args.host == '127.0.0.1' else args.host}:{args.port}")

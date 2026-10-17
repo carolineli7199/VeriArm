@@ -49,6 +49,7 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | `prints.py` | the 10 x 10 cm prints (PDF) and the same pictures `find_art` matches against |
 | `calibrate.py` | works out the 11 spots from the sheets; hover-checks them on the arm |
 | `layout.json` | the 11 spots (world mm) + `calibrated`, `slot_mode`, `region_mm` |
+| `narrate.py` | spoken narration (VeriArm's `announce.py` voice): statement, each artwork as it's carried, closing summary |
 | `app.py`, `page.html` | the web page |
 | `images/1.jpg` ... `8.jpg` | public-domain pictures of the artworks, for the page |
 | `test_curator.py` | validator tests (no robot, no network) |
@@ -87,12 +88,27 @@ camera can't see slot 3).
 ```bash
 .venv/bin/python -m art_curator.app                    # simulated arm (default, safe)
 .venv/bin/python -m art_curator.app --robot            # REAL ARM: no per-motion questions, keep someone at the e-stop
-.venv/bin/python -m art_curator.app --voice            # also reads the title and statement aloud
+.venv/bin/python -m art_curator.app --voice            # narrate out loud (see below)
+.venv/bin/python -m art_curator.app --voice-wait       # same, but the arm waits for each sentence
 .venv/bin/python -m art_curator.app --host 0.0.0.0     # open it from another laptop
 ```
 Port 8090, so it can run next to VeriArm's `ui.py` (8080). Only one of them may drive the arm at a time.
 **Stop arm** (robot mode) stops the arm where it is and leaves the suction as is; the e-stop is the real
 safety.
+
+## Narration (`--voice`)
+
+On the page (`app --voice`) or the terminal (`exhibition run ... --voice`):
+1. after curating: the title and curatorial statement
+2. on Assemble: "Now assembling *title*."
+3. as each tile is carried: "First / Next / And finally, *artwork*, by *artist*." + why it's there
+4. at the end: "*Title*: from *A*, through *B*, to *C*. The exhibition is complete."
+   (on a failure: "I couldn't place *artwork*. Please check the table.")
+
+Speech plays while the arm moves and never changes what the arm does. If the audio stutters, use
+`--voice-wait` (the arm pauses for each sentence, like VeriArm). `VERIARM_VOICE=0` mutes it (sentences are
+still printed). The voice reads English only: other languages fall back to the artwork names.
+Hear a sample: `.venv/bin/python -m art_curator.narrate`.
 
 ## Slot mode: fixed or camera
 

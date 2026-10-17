@@ -268,10 +268,12 @@ class RealRobot:
 
 
 async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_change=None,
-                  slots: str | None = None) -> dict:
+                  slots: str | None = None, narrator=None) -> dict:
     """Plan, locate (camera mode), then do the moves one by one, saving state after every step.
     Returns the final state. Raises NotReadyError before any tile moves if a check fails.
-    on_change(state) is called after each save. slots overrides layout.json's slot_mode."""
+    on_change(state) is called after each save. slots overrides layout.json's slot_mode.
+    narrator (narrate.Narrator): speaks as it goes; never changes what the arm does."""
+    picks = {p["position"]: p for p in exhibition["selected_artworks"]}
     catalog = load_catalog()
     def save(state):
         save_state(state)
@@ -298,9 +300,13 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                          run={"exhibition": exhibition, "moves": [asdict(m) for m in moves], "slot_mode": mode,
                               "located": located, "started": time.strftime("%Y-%m-%dT%H:%M:%S")})
             save(state)
+            if narrator:
+                narrator.starting(exhibition)
             for i, m in enumerate(moves):
                 state["run"]["moves"][i]["status"] = "in_progress"
                 save(state)
+                if narrator:
+                    narrator.placing(picks[m.step])
                 try:
                     await robot.move(m)
                 except Exception as e:  # grip lost, motion error, connection drop: stop, don't guess
@@ -309,6 +315,8 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                     state.update(status="failed",
                                  note=f"move {m.step} ({m.title}) failed: {e}. Check the table, then reset")
                     save(state)
+                    if narrator:
+                        narrator.failed(picks[m.step])
                     return state
                 state["run"]["moves"][i]["status"] = "done"
                 state["locations"][str(m.art_id)] = m.dest
@@ -316,6 +324,8 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
             await robot.finish()
         state.update(status="complete", note="exhibition assembled; reset before the next one")
         save(state)
+        if narrator:
+            narrator.complete(exhibition)
         return state
 
 
@@ -339,6 +349,8 @@ def main():
     p.add_argument("--fail-at", type=int, help="--sim: make move N fail")
     p.add_argument("--slots", choices=SLOT_MODES, help="fixed or camera (default: layout.json slot_mode)")
     p.add_argument("--missing", nargs="*", default=[], help="--sim --slots camera: slots the camera can't see")
+    p.add_argument("--voice", action="store_true", help="narrate out loud while building")
+    p.add_argument("--voice-wait", action="store_true", help="--voice, but the arm waits for each sentence")
     p.add_argument("--yes", action="store_true", help="reset: skip the question; run: don't ask before each motion")
     args = p.parse_args()
 
@@ -365,7 +377,13 @@ def main():
         import find_pick
         find_pick.ASK_BEFORE_MOVING = not args.yes
         robot = SimRobot(fail_at=args.fail_at, missing=args.missing) if args.sim else RealRobot()
-        state = asyncio.run(execute(exhibition, robot, need_calibrated=not args.sim, slots=args.slots))
+        narrator = None
+        if args.voice or args.voice_wait:
+            from art_curator.narrate import Narrator
+            narrator = Narrator(wait=args.voice_wait)
+            narrator.curated(exhibition)  # title + statement, like the page does after curating
+        state = asyncio.run(execute(exhibition, robot, need_calibrated=not args.sim, slots=args.slots,
+                                    narrator=narrator))
     except (CurationError, NotReadyError) as e:
         sys.exit(f"[exhibition] NOT STARTED, nothing moved: {e}")
     print()
