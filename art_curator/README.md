@@ -28,7 +28,7 @@ It is a test stand-in, not a curator.
 
 | What | Where |
 |---|---|
-| 8 artwork tiles | 11 x 11 cm, 2 mm 3D-printed plastic back, 10 x 10 cm print taped on (clear tape helps the suction seal) |
+| 8 artwork tiles | 11 x 11 cm, 2 mm 3D-printed plastic back, 10 x 10 cm print taped on (clear tape helps the suction seal). **Print from `prints.py`**: camera mode recognizes the tiles by comparing against exactly these pictures |
 | 8 pickup slots (S1-S8) | a 4 x 2 block centered on the **green** sheet, overhanging its short ends onto the table |
 | 3 exhibit spots (E1-E3) | a row across the **blue** sheet; E1 is the story's start |
 | orange sheet | not used |
@@ -45,12 +45,15 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | `curator.py` | theme -> Claude -> 3 IDs in order + title, statement, reasons. `validate()` rejects anything off |
 | `exhibition.py` | turns a validated exhibition into 3 moves; tracks where every tile is; runs them |
 | `tile.py` | picks / places one 2 mm tile on the real arm; hover test for the height correction |
+| `find_art.py` | camera mode: finds each tile near its slot and checks it's the right artwork (like `find_box`, for tiles) |
+| `prints.py` | the 10 x 10 cm prints (PDF) and the same pictures `find_art` matches against |
 | `calibrate.py` | works out the 11 spots from the sheets; hover-checks them on the arm |
 | `layout.json` | the 11 spots (world mm) + `calibrated`, `slot_mode`, `region_mm` |
 | `app.py`, `page.html` | the web page |
 | `images/1.jpg` ... `8.jpg` | public-domain pictures of the artworks, for the page |
 | `test_curator.py` | validator tests (no robot, no network) |
-| `runtime/` | gitignored: `state.json` (where tiles are), `run.lock`, `layout.png` |
+| `test_find_art.py` | `find_art` on synthetic camera photos (no robot) |
+| `runtime/` | gitignored: `state.json` (where tiles are), `run.lock`, `layout.png`, `prints.pdf`, `find_art_*` pictures |
 
 ## Commands
 
@@ -73,6 +76,12 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 ```
 Test flags for `--sim`: `--fail-at 2` (move 2 loses its grip), `--slots camera --missing slot_3` (the
 camera can't see slot 3).
+
+### Prints and tests
+```bash
+.venv/bin/python -m art_curator.prints --out ~/Desktop/art_prints.pdf   # print at 100%; check the 10 cm line
+.venv/bin/python -m art_curator.test_find_art                            # camera matching on synthetic photos
+```
 
 ### Web page
 ```bash
@@ -98,8 +107,24 @@ The default is `"slot_mode"` in `layout.json`. `--slots fixed` / `--slots camera
 command (`exhibition run ...`) or for as long as the page's server runs (`app ...`). If camera mode
 misbehaves at the demo: restart the page with `--slots fixed`.
 
-Status: camera mode works with the simulated arm. The real detection (`locate.py`) is not written yet;
-until it is, use fixed on the real arm.
+How `find_art.py` works: straight-down photos over the slots (more than one if needed) are turned into a
+top-down picture of the table at 1 px/mm. In each slot it searches for that slot's artwork at 12
+rotations (tiles may sit sideways or upside down): the color layout gives the position, and the color
+palette there confirms it (a sheet edge can mimic a painting's layout, not its colors). It also scores
+the other 7 artworks, so a swapped tile is caught. It looks 4 cm beyond the region so a tile just outside
+is measured and refused ("is 50 mm from its spot"), not half-matched.
+
+Messages: `no The Kiss found` (empty slot), `looks like Dance, not The Great Wave` (wrong tile),
+`is 50 mm from its spot (max 30): push it back`, `the camera couldn't see the whole slot`.
+
+Try it on the robot without picking anything: `.venv/bin/python -m art_curator.find_art` (moves the camera,
+prints every slot's score and offset). Pictures: `runtime/find_art_<n>.jpg` (what it found) and
+`runtime/find_art_photo_<n>.jpg/.json` (raw photo + camera pose; re-run offline with
+`find_art --image ... --view ...`).
+
+Tested on synthetic photos only (80 tiles: all found, position error under 5 mm; empty, swapped and
+too-far tiles refused). Real photos differ (glare on the tape, print colors, light): on the robot, check the
+scores it prints. Real tiles should be well above `MIN_SCORE` (0.25) in `find_art.py`; empty slots near 0.
 
 ## Rules the code enforces
 
@@ -129,6 +154,8 @@ until it is, use fixed on the real arm.
 4. **Tape the outlines** and label them S1-S8, E1-E3, so resets are quick.
 5. **Full run:** `exhibition reset`, then `exhibition run "<theme>"` (asks before each motion), then the
    web page with `--robot`.
+6. **Camera mode (after fixed works):** `find_art` alone first (camera only, no picking), check the
+   scores and `runtime/find_art_*.jpg`, then `exhibition run "<theme>" --slots camera`.
 
 **Don't re-run `calibrate from-saved` or `calibrate survey` after step 3**: both rebuild `layout.json`
 from scratch and drop `calibrated` and every nudge.
@@ -155,4 +182,5 @@ sheets must be empty). Then repeat step 3.
   the model must go through `validate()`.
 - Every new way to move a tile must update `runtime/state.json` through `exhibition.execute` (state is
   saved after every step).
-- Test without the arm first: `test_curator`, `exhibition ... --sim`, `app` (simulated by default).
+- Test without the arm first: `test_curator`, `test_find_art`, `exhibition ... --sim`, `app` (simulated
+  by default).

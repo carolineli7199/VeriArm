@@ -162,10 +162,10 @@ async def locate_sources(robot, moves: list[Move], state: dict, layout: dict) ->
     the readiness check), then aim each move at its tile. Raises NotReadyError; nothing has moved."""
     home = {where: art for art, where in state["locations"].items() if where.startswith("slot_")}
     spots = {slot: (layout["slots"][slot]["x"], layout["slots"][slot]["y"]) for slot in home}
-    found = await robot.locate(spots, layout.get("region_mm", 30.0))
+    found = await robot.find_art(spots, layout.get("region_mm", 30.0))
     missing = sorted(set(spots) - set(found))
     if missing:
-        raise NotReadyError(f"camera can't find a tile in {', '.join(missing)} (or found two): check those slots")
+        raise NotReadyError(f"camera can't find a tile in {', '.join(missing)}: check those slots")
     for m in moves:
         m.source_xy = found[m.source]
     return {slot: [round(v, 1) for v in xy] for slot, xy in found.items()}
@@ -217,7 +217,7 @@ class SimRobot:
     def __init__(self, seconds: float = 1.0, fail_at: int | None = None, missing: list[str] = ()):
         self.seconds, self.fail_at, self.missing = seconds, fail_at, list(missing)
 
-    async def locate(self, spots: dict, region_mm: float) -> dict:
+    async def find_art(self, spots: dict, region_mm: float) -> dict:
         import random
         print(f"[sim] camera looking for {len(spots)} tiles")
         await asyncio.sleep(self.seconds)
@@ -253,9 +253,9 @@ class RealRobot:
     async def __aexit__(self, *exc):
         await self.machine.close()
 
-    async def locate(self, spots: dict, region_mm: float) -> dict:
-        from art_curator.locate import locate_tiles
-        return await locate_tiles(self.machine, spots, region_mm)
+    async def find_art(self, spots: dict, region_mm: float) -> dict:
+        from art_curator.find_art import find_art  # raises NotReadyError: missing or wrong tile
+        return await find_art(self.machine, spots, region_mm)
 
     async def move(self, m: Move) -> None:
         from art_curator.tile import pick_tile, place_tile
