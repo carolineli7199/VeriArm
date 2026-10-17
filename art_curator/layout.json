@@ -1,0 +1,52 @@
+{
+  "calibrated": false,
+  "note": "From VeriArm's saved zones (poses.json) at 2026-10-16 23:23. Slots 1-8: 4 x 2 block on green (125 x 140 mm pitch, overhanging its ends, rows pulled toward the arm); exhibit row of 3 on blue (125 mm pitch, position 1 at the -y end). Run `calibrate check` on the robot to confirm every spot.",
+  "slots": {
+    "slot_1": {
+      "x": -62.6,
+      "y": 394.8
+    },
+    "slot_2": {
+      "x": 62.3,
+      "y": 399.8
+    },
+    "slot_3": {
+      "x": 187.2,
+      "y": 404.9
+    },
+    "slot_4": {
+      "x": 312.1,
+      "y": 410.0
+    },
+    "slot_5": {
+      "x": -68.2,
+      "y": 534.6
+    },
+    "slot_6": {
+      "x": 56.7,
+      "y": 539.7
+    },
+    "slot_7": {
+      "x": 181.5,
+      "y": 544.8
+    },
+    "slot_8": {
+      "x": 306.4,
+      "y": 549.9
+    }
+  },
+  "exhibit": {
+    "1": {
+      "x": 355.3,
+      "y": -9.0
+    },
+    "2": {
+      "x": 348.7,
+      "y": 115.9
+    },
+    "3": {
+      "x": 342.0,
+      "y": 240.7
+    }
+  }
+}

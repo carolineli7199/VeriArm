@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Art Curator</title>
+<style>
+  :root {
+    --bg: #f6f3ee; --panel: #fffdf9; --ink: #1d1b18; --muted: #6f685f; --line: #e2dcd2;
+    --accent: #7a3e1d; --ok: #2f6b3a; --warn: #9a6a00; --bad: #a32020;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--sans); }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 16px 60px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font: 600 28px/1.2 var(--serif); margin: 0; letter-spacing: .01em; }
+  .mode { font-size: 13px; color: var(--muted); }
+  .mode b { color: var(--ink); }
+  .mode .real { color: var(--bad); }
+
+  form { display: flex; gap: 10px; margin: 22px 0 14px; flex-wrap: wrap; }
+  label.field { flex: 1 1 420px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+  input[type=text] { font: 18px var(--serif); padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px;
+                     background: var(--panel); color: var(--ink); }
+  button { font: 600 15px var(--sans); padding: 12px 18px; border-radius: 8px; border: 1px solid var(--accent);
+           background: var(--accent); color: #fff; cursor: pointer; align-self: flex-end; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button.danger { background: var(--bad); border-color: var(--bad); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .banner { padding: 12px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+            display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .banner.ok { border-color: var(--ok); color: var(--ok); }
+  .banner.warn { border-color: var(--warn); color: var(--warn); }
+  .banner.bad { border-color: var(--bad); color: var(--bad); }
+  .banner .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .banner label { font-size: 14px; color: var(--ink); }
+
+  .show { margin-top: 30px; }
+  .show h2 { font: 600 34px/1.15 var(--serif); margin: 0 0 8px; }
+  .show .statement { font: italic 18px/1.6 var(--serif); color: var(--muted); max-width: 760px; margin: 0 0 22px; }
+  .theme { font-size: 13px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }
+  .wall { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+          display: flex; flex-direction: column; }
+  .card .frame { aspect-ratio: 1; background: #fff; display: flex; align-items: center; justify-content: center;
+                 border-bottom: 1px solid var(--line); }
+  .card img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .card .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .card .pos { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em;
+               display: flex; justify-content: space-between; }
+  .card h3 { font: 600 19px/1.25 var(--serif); margin: 0; }
+  .card .artist { font-size: 14px; color: var(--muted); }
+  .card .reason { font: 16px/1.5 var(--serif); margin: 4px 0 0; }
+  .badge { font-weight: 600; }
+  .badge.done { color: var(--ok); } .badge.in_progress { color: var(--warn); } .badge.failed { color: var(--bad); }
+
+  .collection { margin-top: 40px; }
+  .collection h4 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; }
+  .strip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+  .thumb { text-align: center; font-size: 12px; color: var(--muted); }
+  .thumb img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+  .thumb.away img { opacity: .3; }
+  .thumb.unknown img { outline: 3px solid var(--bad); }
+  .thumb .where { font-weight: 600; }
+
+  @media (max-width: 760px) {
+    .wall { grid-template-columns: 1fr; }
+    .strip { grid-template-columns: repeat(4, 1fr); }
+    .show h2 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AI Art Curator</h1>
+    <div class="mode" id="mode"></div>
+  </header>
+
+  <form id="form">
+    <label class="field">Describe your exhibition theme
+      <input type="text" id="theme" placeholder="Curate an exhibition about finding hope in uncertain times" autocomplete="off">
+    </label>
+    <button type="submit" id="curate">Curate Exhibition</button>
+  </form>
+
+  <div class="banner" id="banner"></div>
+  <section class="show" id="show" hidden></section>
+
+  <section class="collection">
+    <h4>The collection</h4>
+    <div class="strip" id="strip"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const BADGE = {pending: "waiting", in_progress: "moving now", done: "in place", failed: "failed"};
+let S = null, shownKey = "";
+
+async function post(path, body = {}) {
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function banner() {
+  const st = S.state, run = st.run, moving = S.busy === "assembling" || st.status === "running";
+  const done = run ? run.moves.filter(m => m.status === "done").length : 0;
+  let cls = "", text = "", actions = "";
+  const resetBox = `<label><input type="checkbox" id="confirm"> All 8 tiles are back in their slots and the exhibit is empty</label>
+                    <button class="secondary" id="reset">Confirm reset</button>`;
+  if (S.busy === "curating") text = "Curating…";
+  else if (moving) {
+    cls = "warn"; text = `Assembling: ${done} of 3 placed`;
+    if (S.mode === "robot") actions = `<button class="danger" id="stop">Stop arm</button>`;
+  } else if (S.error) { cls = "bad"; text = S.error; if (st.status !== "ready") actions = resetBox; }
+  else if (st.status === "complete") { cls = "ok"; text = "Exhibition assembled: 3 of 3 placed. Reset the table before the next one."; actions = resetBox; }
+  else if (st.status === "failed") { cls = "bad"; text = st.note; actions = resetBox; }
+  else if (st.status === "needs_reset") { cls = "warn"; text = "Physical layout not confirmed. Check the table, then confirm."; actions = resetBox; }
+  else if (S.pending) {
+    text = "Curated, not yet assembled.";
+    if (S.mode === "robot" && !S.calibrated) { cls = "warn"; text += " The arm's positions aren't calibrated yet (layout.json)."; }
+    actions = `<button id="assemble">Assemble exhibition</button>`;
+  } else text = "Ready. Describe a theme to curate an exhibition.";
+  const key = cls + text + actions;
+  if (key === shownKey) return;  // don't rebuild while someone is ticking the checkbox
+  shownKey = key;
+  $("banner").className = "banner " + cls;
+  $("banner").innerHTML = `<span>${esc(text)}</span><span class="actions">${actions}</span>`;
+  $("assemble") && ($("assemble").onclick = () => act(() => post("/api/assemble")));
+  $("stop") && ($("stop").onclick = () => act(() => post("/api/stop").then(d => alertLine(d.message))));
+  $("reset") && ($("reset").onclick = () => act(() => post("/api/reset", {confirm: $("confirm").checked})));
+}
+
+function show() {
+  // While a run exists, show what the arm is building (with each move's status); otherwise the new curation.
+  // (reset clears the run, so on "ready" any exhibition shown is the not-yet-assembled one)
+  const run = S.state.run, fromRun = !!run && S.state.status !== "ready";
+  const ex = fromRun ? run.exhibition : S.pending, moves = fromRun ? run.moves : null;
+  if (!ex) { $("show").hidden = true; return; }
+  $("show").hidden = false;
+  $("show").innerHTML = `
+    <div class="theme">${esc(ex.theme || "")}</div>
+    <h2>${esc(ex.exhibition_title)}</h2>
+    <p class="statement">${esc(ex.curatorial_statement)}</p>
+    <div class="wall">${ex.selected_artworks.map(a => {
+      const m = moves && moves.find(m => m.step === a.position);
+      const badge = m ? `<span class="badge ${m.status}">${BADGE[m.status]}</span>` : "";
+      return `<article class="card">
+        <div class="frame"><img src="/images/${a.id}.jpg" alt="${esc(a.title)}"></div>
+        <div class="body">
+          <div class="pos"><span>Position ${a.position}</span>${badge}</div>
+          <h3>${esc(a.title)}</h3><div class="artist">${esc(a.artist)}</div>
+          <p class="reason">${esc(a.reason)}</p>
+        </div></article>`;
+    }).join("")}</div>`;
+}
+
+function strip() {
+  const loc = S.state.locations || {};
+  $("strip").innerHTML = S.catalog.map(a => {
+    const where = loc[a.id] || "?";
+    const cls = where.startsWith("exhibit") ? "away" : where === "unknown" ? "unknown" : "";
+    const label = where.startsWith("exhibit_") ? "on show " + where.slice(8) : where.replace("_", " ");
+    return `<div class="thumb ${cls}"><img src="/images/${a.id}.jpg" alt="${esc(a.title)}" title="${esc(a.title)}">
+            <div class="where">${esc(label)}</div></div>`;
+  }).join("");
+}
+
+function alertLine(msg) { S.error = msg; shownKey = ""; banner(); }
+
+async function act(fn) {
+  try { await fn(); } catch (e) { alertLine(e.message); return; }
+  await refresh();
+}
+
+async function refresh() {
+  try { S = await (await fetch("/api/status")).json(); } catch { return; }
+  const running = S.busy || S.state.status === "running";
+  $("curate").disabled = !!running;
+  $("mode").innerHTML = S.mode === "robot" ? `<b class="real">REAL ARM</b> · ${S.curator} curator`
+                                            : `<b>simulated arm</b> · ${S.curator} curator`;
+  banner(); show(); strip();
+}
+
+$("form").onsubmit = e => {
+  e.preventDefault();
+  const theme = $("theme").value.trim() || $("theme").placeholder;
+  $("curate").disabled = true;
+  S.busy = "curating"; shownKey = ""; banner();
+  act(() => post("/api/curate", {theme}));
+};
+
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>

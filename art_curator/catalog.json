@@ -1,0 +1,67 @@
+[
+  {
+    "id": 1,
+    "title": "The Starry Night",
+    "artist": "Vincent van Gogh",
+    "year": 1889,
+    "themes": ["wonder", "hope", "imagination", "isolation"],
+    "description": "A swirling night sky above a quiet village.",
+    "pickup_position": "slot_1"
+  },
+  {
+    "id": 2,
+    "title": "The Great Wave off Kanagawa",
+    "artist": "Hokusai",
+    "themes": ["nature", "chaos", "resilience"],
+    "description": "A towering wave rises above boats, with Mount Fuji in the distance.",
+    "pickup_position": "slot_2"
+  },
+  {
+    "id": 3,
+    "title": "The Kiss",
+    "artist": "Gustav Klimt",
+    "themes": ["love", "intimacy", "vulnerability"],
+    "description": "An embracing couple is surrounded by golden decorative patterns.",
+    "pickup_position": "slot_3"
+  },
+  {
+    "id": 4,
+    "title": "The Scream",
+    "artist": "Edvard Munch",
+    "themes": ["fear", "anxiety", "existentialism"],
+    "description": "An anguished figure stands beneath a swirling sky.",
+    "pickup_position": "slot_4"
+  },
+  {
+    "id": 5,
+    "title": "Paris Street; Rainy Day",
+    "artist": "Gustave Caillebotte",
+    "themes": ["urban life", "loneliness", "modernity"],
+    "description": "Pedestrians with umbrellas cross a rain-soaked Paris street.",
+    "pickup_position": "slot_5"
+  },
+  {
+    "id": 6,
+    "title": "Dance",
+    "artist": "Henri Matisse",
+    "themes": ["joy", "freedom", "community"],
+    "description": "Five figures hold hands in a circle of dance.",
+    "pickup_position": "slot_6"
+  },
+  {
+    "id": 7,
+    "title": "Girl with a Pearl Earring",
+    "artist": "Johannes Vermeer",
+    "themes": ["identity", "mystery", "beauty"],
+    "description": "A girl turns toward the viewer, wearing a head covering and a pearl earring.",
+    "pickup_position": "slot_7"
+  },
+  {
+    "id": 8,
+    "title": "Woman with a Parasol",
+    "artist": "Claude Monet",
+    "themes": ["nostalgia", "freedom", "fleeting moments"],
+    "description": "A woman holding a parasol stands outdoors in light and breeze.",
+    "pickup_position": "slot_8"
+  }
+]
