@@ -42,7 +42,7 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | File | What it does |
 |---|---|
 | `catalog.json` | the 8 artworks: id, title, artist, themes, description, pickup slot |
-| `curator.py` | theme -> Claude -> 3 IDs in order + title, statement, reasons. `validate()` rejects anything off |
+| `curator.py` | theme -> Claude -> 3 IDs in order + title, statement, reasons. `validate()` rejects anything off. The web page also tells Claude what the last 3 exhibitions showed, so a run of demos varies |
 | `exhibition.py` | turns a validated exhibition into 3 moves; tracks where every tile is; runs them |
 | `tile.py` | picks / places one 2 mm tile on the real arm; hover test for the height correction |
 | `find_art.py` | camera mode: finds each tile near its slot and checks it's the right artwork (like `find_box`, for tiles) |

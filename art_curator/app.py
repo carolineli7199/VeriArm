@@ -33,6 +33,7 @@ class App:
         self.robot, self.offline, self.voice, self.slots = robot, offline, voice, slots
         self.lock = threading.Lock()
         self.pending: dict | None = None  # last validated curation, not yet assembled
+        self.recent: list[list[int]] = []  # artwork IDs of past curations this session, for variety
         self.busy: str | None = None      # "curating" | "assembling"
         self.error: str | None = None
 
@@ -57,7 +58,7 @@ class App:
     def curate(self, theme: str) -> dict:
         self._claim("curating")
         try:
-            exhibition = curate(theme, offline=self.offline)
+            exhibition = curate(theme, offline=self.offline, recent=self.recent)
         except CurationError as e:
             with self.lock:
                 self.error = f"Curation rejected, nothing will move: {e}"
@@ -67,6 +68,7 @@ class App:
                 self.busy = None
         with self.lock:
             self.pending = exhibition
+            self.recent = (self.recent + [[p["id"] for p in exhibition["selected_artworks"]]])[-3:]
         if self.voice:
             import announce
             announce.speak(f"{exhibition['exhibition_title']}. {exhibition['curatorial_statement']}")
