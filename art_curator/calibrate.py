@@ -85,7 +85,7 @@ def build_layout(sheets: dict, reverse: bool, source: str) -> dict:
     return {
         "calibrated": False,
         "slot_mode": previous.get("slot_mode", "fixed"),  # fixed | camera: see exhibition.py
-        "region_mm": previous.get("region_mm", 30.0),     # camera: how far a tile may sit from its spot
+        "region_mm": previous.get("region_mm", 40.0),     # camera: how far a tile may sit from its spot
         "note": (f"From {source} at {time.strftime('%Y-%m-%d %H:%M')}. Slots 1-8: 4 x 2 block on green "
                  f"({COL_MM:.0f} x {GRID_MM:.0f} mm pitch, overhanging its ends, rows pulled toward the arm); exhibit row of 3 on blue ({ROW_MM:.0f} mm pitch, "
                  f"position 1 at the {'+y' if reverse else '-y'} end). Run `calibrate check` on the robot "

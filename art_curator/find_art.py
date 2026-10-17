@@ -267,7 +267,7 @@ def main():
     args = p.parse_args()
     layout = load_layout()
     spots = {s: (p["x"], p["y"]) for s, p in layout["slots"].items()}
-    region = layout.get("region_mm", 30.0)
+    region = layout.get("region_mm", 40.0)
     try:
         if args.image:
             photos = [(cv2.imread(args.image), json.loads(open(args.view).read()))]

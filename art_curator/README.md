@@ -152,7 +152,7 @@ Hear a sample: `.venv/bin/python -m art_curator.narrate`.
 Where the arm picks each tile:
 
 - **fixed**: at the slot's coordinates in `layout.json`. Tiles must sit on their taped outlines.
-- **camera**: before any tile moves, the camera finds every tile within `region_mm` (default 30 mm) of its
+- **camera**: before any tile moves, the camera finds every tile within `region_mm` (40 mm, in x and in y) of its
   slot and the arm picks where the tile really is. A missing or doubled tile stops the run before
   anything moves, and names the slot.
 
@@ -168,7 +168,7 @@ the other 7 artworks, so a swapped tile is caught. It looks 4 cm beyond the regi
 is measured and refused ("is 50 mm from its spot"), not half-matched.
 
 Messages: `no The Kiss found` (empty slot), `looks like Dance, not The Great Wave` (wrong tile),
-`is 50 mm from its spot (max 30): push it back`, `the camera couldn't see the whole slot`.
+`is 50 mm from its spot (max 40): push it back`, `the camera couldn't see the whole slot`.
 
 Try it on the robot without picking anything: `.venv/bin/python -m art_curator.find_art` (moves the camera,
 prints every slot's score and offset). Pictures: `runtime/find_art_<n>.jpg` (what it found) and
@@ -194,6 +194,8 @@ scores it prints. Real tiles should be well above `MIN_SCORE` (0.25) in `find_ar
 - Real-arm runs refuse while `layout.json` has `"calibrated": false`. Simulated runs ignore it.
 
 ## First time on the robot (in this order)
+
+The full checklist with every parameter to tune: **[ROBOT_DAY.md](ROBOT_DAY.md)**.
 
 1. **Height correction.** One tile at the blue zone center:
    `.venv/bin/python -m art_curator.tile hover`. Measure the gap G (cup bottom to tile top). Set

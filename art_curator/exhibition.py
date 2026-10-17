@@ -162,7 +162,7 @@ async def locate_sources(robot, moves: list[Move], state: dict, layout: dict) ->
     the readiness check), then aim each move at its tile. Raises NotReadyError; nothing has moved."""
     home = {where: art for art, where in state["locations"].items() if where.startswith("slot_")}
     spots = {slot: (layout["slots"][slot]["x"], layout["slots"][slot]["y"]) for slot in home}
-    found = await robot.find_art(spots, layout.get("region_mm", 30.0))
+    found = await robot.find_art(spots, layout.get("region_mm", 40.0))
     missing = sorted(set(spots) - set(found))
     if missing:
         raise NotReadyError(f"camera can't find a tile in {', '.join(missing)}: check those slots")
