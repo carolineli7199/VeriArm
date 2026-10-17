@@ -42,14 +42,14 @@ Earring, S8 Woman with a Parasol. See `python -m art_curator.calibrate map` for 
 | File | What it does |
 |---|---|
 | `catalog.json` | the 8 artworks: id, title, artist, themes, description, pickup slot |
-| `curator.py` | theme -> Claude -> 3 IDs in order + title, statement, reasons. `validate()` rejects anything off. The web page also tells Claude what the last 3 exhibitions showed, so a run of demos varies |
+| `curator.py` | theme -> Claude -> 3 IDs in order + title, spoken preview, statement, closing reflection, reasons. `validate()` rejects anything off. The web page also tells Claude what the last 3 exhibitions showed, so a run of demos varies |
 | `exhibition.py` | turns a validated exhibition into 3 moves; tracks where every tile is; runs them |
 | `tile.py` | picks / places one 2 mm tile on the real arm; hover test for the height correction |
 | `find_art.py` | camera mode: finds each tile near its slot and checks it's the right artwork (like `find_box`, for tiles) |
 | `prints.py` | the 10 x 10 cm prints (PDF) and the same pictures `find_art` matches against |
 | `calibrate.py` | works out the 11 spots from the sheets; hover-checks them on the arm |
 | `layout.json` | the 11 spots (world mm) + `calibrated`, `slot_mode`, `region_mm` |
-| `narrate.py` | spoken narration (VeriArm's `announce.py` voice): statement, each artwork as it's carried, closing summary |
+| `narrate.py` | spoken narration (ElevenLabs, Mac voice as fallback): preview, each artwork as it's carried, statement, reflection, sign-off |
 | `app.py`, `page.html` | the web page |
 | `images/1.jpg` ... `8.jpg` | public-domain pictures of the artworks, for the page |
 | `test_curator.py` | validator tests (no robot, no network) |
@@ -99,14 +99,35 @@ safety.
 ## Narration (`--voice`)
 
 On the page (`app --voice`) or the terminal (`exhibition run ... --voice`):
-1. after curating: the title and curatorial statement
+1. after curating: the title and Claude's short spoken preview of the journey and its high point (the
+   `preview` field: under 30 words, e.g. "When the ground shifts beneath you, where does light come from?
+   Follow a path from dread to a night sky that refuses to stop shining.")
 2. on Assemble: "Now assembling *title*."
 3. as each tile is carried: "First / Next / And finally, *artwork*, by *artist*." + why it's there
-4. at the end: "*Title*: from *A*, through *B*, to *C*. The exhibition is complete."
+4. once all 3 are placed: "*Title*: from *A*, through *B*, to *C*.", the full curatorial statement over
+   the finished table, Claude's closing reflection (the `closing` field: one sentence about the theme, e.g.
+   "Perhaps hope isn't the absence of uncertainty, but the courage to find beauty within it."), and always
+   the same sign-off: "Thank you for curating with me. Until our next exhibition, stay curious!"
+   (`SIGN_OFF` in `narrate.py`). The page says "All 3 placed. The curator is speaking…" until the
+   closing line has been spoken, then "Exhibition assembled".
    (on a failure: "I couldn't place *artwork*. Please check the table.")
 
-Speech plays while the arm moves and never changes what the arm does. If the audio stutters, use
-`--voice-wait` (the arm pauses for each sentence, like VeriArm). `VERIARM_VOICE=0` mutes it (sentences are
+Pacing: each artwork's description plays while its tile is carried, and the next tile doesn't start until
+that description has finished (the first move also waits for the preview; the closing words wait for the
+last description). Each tile takes its move time or its description time (~10-15 s), whichever is longer, so
+voice and arm stay together.
+
+Voice: **ElevenLabs** when `ELEVENLABS_API_KEY` is in `.env` (default voice "George", change with
+`ELEVENLABS_VOICE_ID`; list voices with `.venv/bin/python -m art_curator.narrate voices`). Right after
+curating, every line of the exhibition is generated in parallel (preview first), and clips are cached in
+`runtime/voice_cache/`. Without a key, or if a line can't be generated in time (no wifi), that line uses
+the Mac's `say`; a bad key or used-up credits switch to `say` for the rest of the session. A better Mac
+voice: download e.g. "Ava (Premium)" in System Settings > Accessibility > Spoken Content, then
+`ART_MAC_VOICE=Ava (Premium)` in `.env`. Test a line: `.venv/bin/python -m art_curator.narrate say "Hello"`.
+
+Speech never changes where or how the arm moves, only when the next tile starts. If the audio stutters
+while the arm moves, use `--voice-wait` (fully sequential: the arm pauses for every sentence, then moves,
+like VeriArm). `VERIARM_VOICE=0` mutes it (sentences are
 still printed). The voice reads English only: other languages fall back to the artwork names.
 Hear a sample: `.venv/bin/python -m art_curator.narrate`.
 

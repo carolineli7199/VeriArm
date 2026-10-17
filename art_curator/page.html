@@ -117,7 +117,7 @@ function banner() {
                     <button class="secondary" id="reset">Confirm reset</button>`;
   if (S.busy === "curating") text = "Curating…";
   else if (moving) {
-    cls = "warn"; text = `Assembling: ${done} of 3 placed`;
+    cls = "warn"; text = done === 3 ? "All 3 placed. The curator is speaking…" : `Assembling: ${done} of 3 placed`;
     if (S.mode === "robot") actions = `<button class="danger" id="stop">Stop arm</button>`;
   } else if (S.error) { cls = "bad"; text = S.error; if (st.status !== "ready") actions = resetBox; }
   else if (st.status === "complete") { cls = "ok"; text = "Exhibition assembled: 3 of 3 placed. Reset the table before the next one."; actions = resetBox; }

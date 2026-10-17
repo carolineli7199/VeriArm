@@ -28,10 +28,12 @@ RECENT_KEPT = 3  # past exhibitions mentioned to the curator, for variety across
 RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["exhibition_title", "curatorial_statement", "selected_artworks"],
+    "required": ["exhibition_title", "preview", "curatorial_statement", "closing", "selected_artworks"],
     "properties": {
         "exhibition_title": {"type": "string"},
+        "preview": {"type": "string"},
         "curatorial_statement": {"type": "string"},
+        "closing": {"type": "string"},
         "selected_artworks": {
             "type": "array",
             "items": {
@@ -53,6 +55,22 @@ The collection has exactly eight artworks (the catalog below). For the visitor's
 three different artworks and order them as a story: position 1 opens the exhibition, position 2 develops
 it, position 3 resolves it. Give the exhibition a short evocative title, a curatorial statement of two or
 three sentences, and for each artwork one or two sentences on why it belongs at that point in the story.
+
+Also write a spoken preview, read aloud before the robot builds the exhibition: one or two sentences, under
+30 words, that invite the listener into the journey and hint at its high point. Evoke the arc rather than
+listing the three works (naming one is fine); the details come as each piece is placed, and the full
+statement once all three are up. Give each preview its own opening and rhythm (a question, an image, a
+scene, a direct address), not a set formula.
+
+Finally, write a closing reflection, spoken after the full statement once all three works are in place,
+as a museum curator concluding a guided tour: thoughtful, evocative, a little poetic. One sentence, under 25
+words, that reflects on the theme itself and leaves the visitor with something to carry home. A fixed
+sign-off follows it, so don't thank or say goodbye. Vary how it begins from exhibition to exhibition (these
+examples lean on "perhaps"; take their tone, not that word). For tone only (write your own, never reuse these):
+  hope in uncertainty: "Perhaps hope isn't the absence of uncertainty, but the courage to find beauty within it."
+  the human experience: "To be human, perhaps, is to hold joy and sorrow, connection and solitude, all at once."
+  love and belonging: "In the end, belonging may be less about finding our place in the world and more
+  about finding ourselves in one another."
 Use only IDs from the catalog. If the theme is odd or off-topic, still curate the most fitting three.
 
 Visitors try many themes in a row, so consider all eight works fresh for each theme: every work can carry
@@ -111,7 +129,7 @@ def validate(answer, catalog: dict[int, dict]) -> dict:
     repeated IDs, positions that aren't exactly {1, 2, 3}."""
     if not isinstance(answer, dict):
         raise CurationError("answer is not a JSON object")
-    expected = {"exhibition_title", "curatorial_statement", "selected_artworks"}
+    expected = {"exhibition_title", "preview", "curatorial_statement", "closing", "selected_artworks"}
     if set(answer) != expected:
         raise CurationError(f"answer fields {sorted(answer)} != {sorted(expected)}")
     picks = answer["selected_artworks"]
@@ -134,7 +152,9 @@ def validate(answer, catalog: dict[int, dict]) -> dict:
         raise CurationError(f"positions must be exactly 1, 2, 3; got {[p['position'] for p in clean]}")
     return {
         "exhibition_title": _text(answer["exhibition_title"], "exhibition_title"),
+        "preview": _text(answer["preview"], "preview"),
         "curatorial_statement": _text(answer["curatorial_statement"], "curatorial_statement"),
+        "closing": _text(answer["closing"], "closing"),
         "selected_artworks": sorted(clean, key=lambda p: p["position"]),
     }
 
@@ -197,7 +217,9 @@ def offline_pick(theme: str, catalog: dict[int, dict]) -> dict:
     top = sorted(catalog.values(), key=lambda a: (-score(a), a["id"]))[:N_PICKS]
     return {
         "exhibition_title": f"Offline: {theme[:40]}",
+        "preview": f"A test exhibition about {theme[:40]}.",
         "curatorial_statement": "Picked by keyword overlap (offline test mode, no AI).",
+        "closing": "Thank you for testing.",
         "selected_artworks": [{"id": a["id"], "position": i, "reason": f"Themes: {', '.join(a['themes'])}."}
                               for i, a in enumerate(top, 1)],
     }
@@ -219,7 +241,8 @@ def curate(theme: str, offline: bool = False, catalog: dict[int, dict] | None = 
 
 
 def show(ex: dict) -> None:
-    print(f"\n  {ex['exhibition_title']}\n  {ex['curatorial_statement']}\n")
+    print(f"\n  {ex['exhibition_title']}\n  (preview) {ex['preview']}\n  {ex['curatorial_statement']}\n"
+          f"  (closing) {ex['closing']}\n")
     for p in ex["selected_artworks"]:
         print(f"  {p['position']}. [{p['id']}] {p['title']} ({p['artist']})\n     {p['reason']}")
     print(f"\n  ({ex['curator']}, {ex['seconds']} s)")

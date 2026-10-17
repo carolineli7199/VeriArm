@@ -301,12 +301,15 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                               "located": located, "started": time.strftime("%Y-%m-%dT%H:%M:%S")})
             save(state)
             if narrator:
+                await narrator.quiet()  # let the preview finish if Assemble was pressed during it
                 narrator.starting(exhibition)
             for i, m in enumerate(moves):
+                if narrator and i:
+                    await narrator.quiet()  # the previous tile's description finishes before the next tile
                 state["run"]["moves"][i]["status"] = "in_progress"
                 save(state)
                 if narrator:
-                    narrator.placing(picks[m.step])
+                    narrator.placing(picks[m.step])  # plays while this tile is carried
                 try:
                     await robot.move(m)
                 except Exception as e:  # grip lost, motion error, connection drop: stop, don't guess
@@ -322,10 +325,12 @@ async def execute(exhibition: dict, robot, need_calibrated: bool = True, on_chan
                 state["locations"][str(m.art_id)] = m.dest
                 save(state)
             await robot.finish()
+        if narrator:  # still "running" (page: "All 3 placed") until the closing words have been spoken
+            await narrator.quiet()
+            narrator.complete(exhibition)
+            await narrator.quiet()
         state.update(status="complete", note="exhibition assembled; reset before the next one")
         save(state)
-        if narrator:
-            narrator.complete(exhibition)
         return state
 
 

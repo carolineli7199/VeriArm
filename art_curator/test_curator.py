@@ -9,7 +9,9 @@ from art_curator.curator import CurationError, curate, load_catalog, validate
 CATALOG = load_catalog()
 GOOD = {
     "exhibition_title": "Finding Light in Darkness",
+    "preview": "From the depths of fear, through the storm, toward a sky full of light.",
     "curatorial_statement": "An exploration of how humanity finds hope amid uncertainty.",
+    "closing": "Look up tonight; the stars are still there.",
     "selected_artworks": [
         {"id": 4, "position": 1, "reason": "The Scream represents our confrontation with fear."},
         {"id": 2, "position": 2, "reason": "The Great Wave captures the struggle against overwhelming forces."},
@@ -29,6 +31,10 @@ BAD = {
     "missing title": broken(lambda a: a.pop("exhibition_title")),
     "extra field": broken(lambda a: a.update(robot_command="go")),
     "blank statement": broken(lambda a: a.update(curatorial_statement="   ")),
+    "missing preview": broken(lambda a: a.pop("preview")),
+    "blank preview": broken(lambda a: a.update(preview="")),
+    "missing closing": broken(lambda a: a.pop("closing")),
+    "blank closing": broken(lambda a: a.update(closing=" ")),
     "two artworks": broken(lambda a: a["selected_artworks"].pop()),
     "four artworks": broken(lambda a: a["selected_artworks"].append({"id": 5, "position": 3, "reason": "x"})),
     "duplicate id": broken(lambda a: a["selected_artworks"][1].update(id=4)),
