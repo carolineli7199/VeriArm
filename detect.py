@@ -47,6 +47,7 @@ SIZE_TOLERANCE_MM = 30.0     # length / width
 HEIGHT_TOLERANCE_MM = 25.0     # depth reads up to ~15 mm off (bulging tops); our boxes differ by ~80 mm
 MIN_OBJECT_HEIGHT_MM = 20.0  # anything taller than this above the paper is an object
 ZONE_SEARCH_MARGIN_PX = 60   # boxes may hang a little over the zone's edge
+NO_DEPTH_GAP_PX = 21         # fill no-depth gaps up to ~this wide between tall pixels (taped / dark box tops)
 
 # OpenCV hue runs 0-180. Tuned on reference/overview-blue.jpg.
 BLUE_HSV_LOW = (95, 120, 60)
@@ -178,6 +179,12 @@ def _object_mask_from_depth(bgr, depth, zone_rect):
     paper_depth = float(np.median(paper))
     tall = ((paper_depth - depth.astype(np.float32)) > MIN_OBJECT_HEIGHT_MM) & (depth > 0)
     mask = (tall & (near_zone > 0)).astype(np.uint8) * 255
+    # Dark or shiny surfaces (black tape, glossy tape) often return NO depth, which splits a box top into
+    # pieces. Fill those no-reading pixels where they lie between tall pixels. Pixels where the camera did
+    # measure the table stay table, so two separate objects don't get merged.
+    no_reading = (depth == 0) & (near_zone > 0)
+    bridged = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((NO_DEPTH_GAP_PX, NO_DEPTH_GAP_PX), np.uint8))
+    mask[(bridged > 0) & no_reading] = 255
     return cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8)), paper_depth
 
 
